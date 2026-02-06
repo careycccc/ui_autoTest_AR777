@@ -1,0 +1,104 @@
+{
+  "generatedAt": "2026-02-06T10:29:17.633Z",
+  "summary": {
+    "ttfb": {
+      "avg": 1353.800000011921,
+      "min": 1353.800000011921,
+      "max": 1353.800000011921,
+      "count": 1
+    },
+    "fcp": {
+      "avg": 4932,
+      "min": 4932,
+      "max": 4932,
+      "count": 1
+    },
+    "lcp": {
+      "avg": 6592,
+      "min": 6592,
+      "max": 6592,
+      "count": 1
+    },
+    "tti": {
+      "avg": 6514.300000011921,
+      "min": 6514.300000011921,
+      "max": 6514.300000011921,
+      "count": 1
+    },
+    "visuallyComplete": {
+      "avg": 6592,
+      "min": 6592,
+      "max": 6592,
+      "count": 1
+    },
+    "domContentLoaded": {
+      "avg": 2422.699999988079,
+      "min": 2422.699999988079,
+      "max": 2422.699999988079,
+      "count": 1
+    },
+    "load": {
+      "avg": 6732.199999988079,
+      "min": 6732.199999988079,
+      "max": 6732.199999988079,
+      "count": 1
+    }
+  },
+  "pages": [
+    {
+      "url": "https://arplatsaassit4.club",
+      "device": "iPhone 14",
+      "timing": {
+        "ttfb": 1353.800000011921,
+        "fcp": 4932,
+        "lcp": 6592,
+        "cls": 0.04429706440481991,
+        "fid": null,
+        "inp": null,
+        "domContentLoaded": 2422.699999988079,
+        "load": 6732.199999988079,
+        "tti": 6514.300000011921,
+        "visuallyComplete": 6592
+      },
+      "resources": {
+        "domNodes": 863,
+        "jsHeapSize": 11514428,
+        "requestCount": 129,
+        "transferSize": 2130891
+      },
+      "longTasks": {
+        "count": 6,
+        "totalDuration": 3407,
+        "maxDuration": 1667,
+        "avgDuration": 567.8333333333334
+      },
+      "gpu": {
+        "vendor": "Google Inc. (Google)",
+        "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+      },
+      "fps": {
+        "current": 100,
+        "history": [
+          {
+            "time": 9264.1,
+            "fps": 98
+          },
+          {
+            "time": 10264.1,
+            "fps": 100
+          },
+          {
+            "time": 11264.1,
+            "fps": 97
+          },
+          {
+            "time": 12264.2,
+            "fps": 100
+          }
+        ]
+      },
+      "screenshot": "/Users/zhangwensi/Desktop/test_memoryLeak/ui-automation-platform/reports/screenshots/iPhone-14-page-load-2026-02-06T10-28-41-970Z.png",
+      "recordedAt": "2026-02-06T10:29:17.333Z"
+    }
+  ]
+}

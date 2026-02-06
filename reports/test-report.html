@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI自动化测试报告</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #333; line-height: 1.6; }
+        .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+        
+        header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px; border-radius: 16px; margin-bottom: 24px; }
+        header h1 { font-size: 32px; margin-bottom: 16px; text-align: center; }
+        
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px; margin-top: 20px; }
+        .summary-item { text-align: center; background: rgba(255,255,255,0.15); padding: 16px; border-radius: 12px; }
+        .summary-value { font-size: 32px; font-weight: bold; }
+        .summary-label { font-size: 13px; opacity: 0.9; }
+        .summary-item.passed .summary-value { color: #4ade80; }
+        .summary-item.failed .summary-value { color: #f87171; }
+        
+        .tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+        .tab { padding: 12px 24px; background: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; color: #666; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .tab:hover { background: #f8f9fa; }
+        .tab.active { background: #667eea; color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .card h3 { color: #333; margin-bottom: 16px; font-size: 18px; }
+        
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+        .metric-card { background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center; position: relative; }
+        .metric-value { font-size: 24px; font-weight: bold; color: #667eea; }
+        .metric-label { color: #666; font-size: 12px; margin-top: 4px; }
+        .metric-note { color: #999; font-size: 10px; margin-top: 4px; font-style: italic; }
+        .metric-card.good { border-left: 4px solid #10b981; }
+        .metric-card.good .metric-value { color: #10b981; }
+        .metric-card.warning { border-left: 4px solid #f59e0b; }
+        .metric-card.warning .metric-value { color: #f59e0b; }
+        .metric-card.bad { border-left: 4px solid #ef4444; }
+        .metric-card.bad .metric-value { color: #ef4444; }
+        .metric-card.na { border-left: 4px solid #9ca3af; opacity: 0.7; }
+        .metric-card.na .metric-value { color: #9ca3af; }
+        
+        .info-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+        .info-box h4 { color: #1e40af; margin-bottom: 8px; font-size: 14px; }
+        .info-box p { color: #1e40af; font-size: 13px; margin-bottom: 4px; }
+        .info-box ul { margin-left: 20px; color: #1e40af; font-size: 13px; }
+        
+        .suite { margin-bottom: 24px; }
+        .suite-header { background: #f8f9fa; padding: 16px 20px; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+        .suite-name { font-weight: 600; font-size: 16px; }
+        .device-badge { display: inline-block; padding: 4px 12px; background: #e0e7ff; color: #4338ca; border-radius: 20px; font-size: 12px; font-weight: 500; margin-left: 8px; }
+        .suite-body { background: white; border-radius: 0 0 12px 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        
+        .test-case { border-bottom: 1px solid #f0f0f0; }
+        .test-case:last-child { border-bottom: none; }
+        .test-header { padding: 16px 20px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s; }
+        .test-header:hover { background: #f8f9fa; }
+        .test-status { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+        .test-status.passed { background: #dcfce7; color: #166534; }
+        .test-status.failed { background: #fee2e2; color: #991b1b; }
+        .test-details { display: none; padding: 0 20px 20px; background: #fafafa; }
+        .test-details.open { display: block; }
+        
+        .step { display: flex; gap: 12px; padding: 12px 16px; background: white; border-radius: 8px; margin-bottom: 8px; }
+        .step-number { background: #667eea; color: white; min-width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+        .step.failed .step-number { background: #ef4444; }
+        .step-content { flex: 1; }
+        .step-name { font-weight: 500; }
+        .step-duration { color: #888; font-size: 12px; }
+        
+        .error-box { background: #fee2e2; border: 1px solid #fecaca; border-radius: 8px; padding: 16px; margin-top: 16px; }
+        .error-message { color: #991b1b; font-weight: 500; }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; font-weight: 600; font-size: 12px; color: #666; }
+        .url-cell { max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .status-badge { padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; }
+        .status-badge.completed { background: #dcfce7; color: #166534; }
+        .status-badge.failed { background: #fee2e2; color: #991b1b; }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; justify-content: center; align-items: center; }
+        .modal.open { display: flex; }
+        .modal img { max-width: 95%; max-height: 95%; border-radius: 8px; }
+        .modal-close { position: absolute; top: 20px; right: 30px; color: white; font-size: 40px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧪 UI 自动化测试报告</h1>
+            <div class="summary-grid">
+                <div class="summary-item"><div class="summary-value">1</div><div class="summary-label">总用例</div></div>
+                <div class="summary-item passed"><div class="summary-value">0</div><div class="summary-label">通过</div></div>
+                <div class="summary-item failed"><div class="summary-value">1</div><div class="summary-label">失败</div></div>
+                <div class="summary-item"><div class="summary-value">0.0%</div><div class="summary-label">通过率</div></div>
+                <div class="summary-item"><div class="summary-value">51.0s</div><div class="summary-label">耗时</div></div>
+            </div>
+        </header>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('results')">📋 测试结果</button>
+            <button class="tab" onclick="showTab('performance')">📊 性能数据</button>
+            <button class="tab" onclick="showTab('network')">🌐 网络</button>
+        </div>
+
+        <div id="results" class="tab-content active">
+            
+      <div class="suite">
+        <div class="suite-header">
+          <div class="suite-name">📁 arr777.test.js<span class="device-badge">iPhone 14</span></div>
+          <div>
+            <span style="color: #10b981">✓ 0</span>
+            <span style="color: #ef4444; margin-left: 12px;">✗ 1</span>
+            <span style="color: #888; margin-left: 12px;">⏱ 48.02s</span>
+          </div>
+        </div>
+        <div class="suite-body">
+          
+            <div class="test-case">
+              <div class="test-header" onclick="toggleTest(this)">
+                <div>
+                  <span class="test-status failed">✗ failed</span>
+                  <span style="margin-left: 12px;">AR777首页 - 首次加载性能</span>
+                </div>
+                <span style="color: #888; font-size: 13px;">48.02s</span>
+              </div>
+              <div class="test-details">
+                <div class="error-box"><div class="error-message">❌ locator.click: Timeout 30000ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-testid="login-submit-btn"]')[22m
+[2m    - locator resolved to <button disabled class="btn" type="button" data-v-829bed99="" data-testid="login-submit-btn">Logining</button>[22m
+[2m  - attempting click action[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is not enabled[22m
+[2m    - retrying click action[22m
+[2m    - waiting 20ms[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is not enabled[22m
+[2m    - retrying click action[22m
+[2m      - waiting 100ms[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is not enabled[22m
+[2m    - retrying click action[22m
+[2m      - waiting 500ms[22m
+[2m    - waiting for element to be visible, enabled and stable[22m
+[2m  - element was detached from the DOM, retrying[22m
+</div></div>
+                
+                  <div style="margin-top: 16px;">
+                    
+                      <div class="step passed">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                          <div class="step-name">导航到: https://arplatsaassit4.club</div>
+                          <div class="step-duration">12.81s</div>
+                        </div>
+                      </div>
+                    
+                      <div class="step passed">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                          <div class="step-name">验证页面加载</div>
+                          <div class="step-duration">0.02s</div>
+                        </div>
+                      </div>
+                    
+                      <div class="step passed">
+                        <div class="step-number">4</div>
+                        <div class="step-content">
+                          <div class="step-name">点击: text=Claim My Bonus</div>
+                          <div class="step-duration">0.08s</div>
+                        </div>
+                      </div>
+                    
+                      <div class="step passed">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                          <div class="step-name">检查并处理弹窗</div>
+                          <div class="step-duration">0.08s</div>
+                        </div>
+                      </div>
+                    
+                      <div class="step passed">
+                        <div class="step-number">5</div>
+                        <div class="step-content">
+                          <div class="step-name">触发用户交互 (点击登录按钮)</div>
+                          <div class="step-duration">0.33s</div>
+                        </div>
+                      </div>
+                    
+                      <div class="step passed">
+                        <div class="step-number">7</div>
+                        <div class="step-content">
+                          <div class="step-name">等待 2000ms</div>
+                          <div class="step-duration">2.00s</div>
+                        </div>
+                      </div>
+                    
+                      <div class="step passed">
+                        <div class="step-number">8</div>
+                        <div class="step-content">
+                          <div class="step-name">等待 1000ms</div>
+                          <div class="step-duration">1.00s</div>
+                        </div>
+                      </div>
+                    
+                      <div class="step failed">
+                        <div class="step-number">6</div>
+                        <div class="step-content">
+                          <div class="step-name">登录页面 - 验证页面加载</div>
+                          <div class="step-duration">34.63s</div>
+                        </div>
+                      </div>
+                    
+                  </div>
+                
+              </div>
+            </div>
+          
+        </div>
+      </div>
+    
+        </div>
+
+        <div id="performance" class="tab-content">
+            
+      <div class="card">
+        <h3>⚡ Web Vitals</h3>
+        <div class="metrics-grid">
+          <div class="metric-card bad">
+            <div class="metric-value">6592ms</div>
+            <div class="metric-label">LCP</div>
+          </div>
+          <div class="metric-card bad">
+            <div class="metric-value">4932ms</div>
+            <div class="metric-label">FCP</div>
+          </div>
+          <div class="metric-card good">
+            <div class="metric-value">0.0443</div>
+            <div class="metric-label">CLS</div>
+          </div>
+          <div class="metric-card warning">
+            <div class="metric-value">1354ms</div>
+            <div class="metric-label">TTFB</div>
+          </div>
+          <div class="metric-card na">
+            <div class="metric-value">N/A</div>
+            <div class="metric-label">FID</div>
+            <div class="metric-note">需要用户交互</div>
+          </div>
+          <div class="metric-card na">
+            <div class="metric-value">N/A</div>
+            <div class="metric-label">INP</div>
+            <div class="metric-note">需要用户交互</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-box">
+        <h4>ℹ️ 关于 FID 和 INP</h4>
+        <p><strong>FID (First Input Delay)</strong>: 用户首次交互（点击、触摸）到浏览器响应的延迟时间。</p>
+        <p><strong>INP (Interaction to Next Paint)</strong>: 所有交互中响应最慢的延迟时间。</p>
+        <p>⚠️ 这两个指标需要<strong>用户实际进行交互操作</strong>（如点击按钮）才能采集到数据。自动化测试中如果没有触发交互，这些值会显示为 N/A。</p>
+      </div>
+
+      <div class="card">
+        <h3>🖥️ CPU 使用情况</h3>
+        <div class="metrics-grid">
+          <div class="metric-card good">
+            <div class="metric-value">0.0%</div>
+            <div class="metric-label">CPU 使用率</div>
+            <div class="metric-note">基于任务执行时间估算</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">118ms</div>
+            <div class="metric-label">脚本执行时间</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">60ms</div>
+            <div class="metric-label">布局计算时间</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">4138ms</div>
+            <div class="metric-label">总任务时间</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>🎮 GPU & 渲染</h3>
+        <div class="metrics-grid">
+          <div class="metric-card good">
+            <div class="metric-value">33%</div>
+            <div class="metric-label">GPU 负载估算</div>
+            <div class="metric-note">正常负载</div>
+          </div>
+          <div class="metric-card good">
+            <div class="metric-value">10.00ms</div>
+            <div class="metric-label">平均帧时间</div>
+            <div class="metric-note">目标: ≤16.67ms (60fps)</div>
+          </div>
+          <div class="metric-card good">
+            <div class="metric-value">0.0%</div>
+            <div class="metric-label">丢帧率</div>
+            <div class="metric-note">帧时间 >16.67ms 的比例</div>
+          </div>
+          <div class="metric-card" style="grid-column: span 2;">
+            <div class="metric-value" style="font-size: 14px;">ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)</div>
+            <div class="metric-label">GPU 型号</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-box">
+        <h4>ℹ️ GPU 负载估算说明</h4>
+        <p>GPU 负载是<strong>基于帧渲染时间估算</strong>的，并非真实 GPU 使用率（浏览器不提供此数据）。</p>
+        <ul>
+          <li><strong>0-25%</strong>: 页面简单，GPU 很空闲（帧时间 1-8ms）</li>
+          <li><strong>25-60%</strong>: 正常渲染负载（帧时间 8-16.67ms）</li>
+          <li><strong>60-90%</strong>: 较高负载，可能开始掉帧（帧时间 16.67-33.33ms）</li>
+          <li><strong>90-100%</strong>: 高负载，明显卡顿（帧时间 >33.33ms）</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>🎬 帧率 (FPS)</h3>
+        <div class="metrics-grid">
+          <div class="metric-card good">
+            <div class="metric-value">100</div>
+            <div class="metric-label">当前 FPS</div>
+          </div>
+          <div class="metric-card good">
+            <div class="metric-value">99</div>
+            <div class="metric-label">平均 FPS</div>
+          </div>
+          <div class="metric-card good">
+            <div class="metric-value">97</div>
+            <div class="metric-label">最低 FPS</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">100</div>
+            <div class="metric-label">最高 FPS</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>⏱️ Long Tasks (>50ms)</h3>
+        <div class="metrics-grid">
+          <div class="metric-card warning">
+            <div class="metric-value">6</div>
+            <div class="metric-label">任务数量</div>
+          </div>
+          <div class="metric-card bad">
+            <div class="metric-value">1667ms</div>
+            <div class="metric-label">最长任务</div>
+          </div>
+          <div class="metric-card bad">
+            <div class="metric-value">3407ms</div>
+            <div class="metric-label">总阻塞时间 (TBT)</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">568ms</div>
+            <div class="metric-label">平均耗时</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-box">
+        <h4>ℹ️ Long Tasks 说明</h4>
+        <p><strong>Long Task (长任务)</strong>是指执行时间超过 50ms 的 JavaScript 任务。</p>
+        <p><strong>为什么重要？</strong></p>
+        <ul>
+          <li>浏览器主线程是单线程的，长任务会阻塞用户交互</li>
+          <li>当任务执行超过 50ms 时，用户会感觉到界面"卡顿"</li>
+          <li><strong>50-100ms</strong>: 轻微延迟感</li>
+          <li><strong>100-300ms</strong>: 明显卡顿</li>
+          <li><strong>>300ms</strong>: 严重卡顿，用户体验差</li>
+        </ul>
+        <p><strong>总阻塞时间 (TBT)</strong>: 所有长任务超过 50ms 部分的时间总和，是衡量页面响应能力的重要指标。</p>
+      </div>
+
+      <div class="card">
+        <h3>💾 内存 & DOM</h3>
+        <div class="metrics-grid">
+          <div class="metric-card good">
+            <div class="metric-value">11.32MB</div>
+            <div class="metric-label">JS Heap</div>
+          </div>
+          <div class="metric-card warning">
+            <div class="metric-value">2309</div>
+            <div class="metric-label">DOM 节点</div>
+          </div>
+          <div class="metric-card good">
+            <div class="metric-value">407</div>
+            <div class="metric-label">事件监听器</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">2</div>
+            <div class="metric-label">Frames</div>
+          </div>
+        </div>
+      </div>
+    
+        </div>
+
+        <div id="network" class="tab-content">
+            
+      <div class="card">
+        <h3>📊 网络统计</h3>
+        <div class="metrics-grid">
+          <div class="metric-card"><div class="metric-value">205</div><div class="metric-label">总请求</div></div>
+          <div class="metric-card good"><div class="metric-value">195</div><div class="metric-label">成功</div></div>
+          <div class="metric-card "><div class="metric-value">0</div><div class="metric-label">失败</div></div>
+          <div class="metric-card"><div class="metric-value">2.98 MB</div><div class="metric-label">总大小</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>📋 请求列表</h3>
+        <div style="overflow-x: auto;">
+          <table>
+            <thead><tr><th>状态</th><th>方法</th><th>URL</th><th>类型</th><th>大小</th><th>耗时</th></tr></thead>
+            <tbody>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/">https://arplatsaassit4.club/</td>
+                  <td>Document</td>
+                  <td>2.23 KB</td>
+                  <td>1354ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/assets/css/blue.css">https://arplatsaassit4.club/assets/css/blue.css</td>
+                  <td>Stylesheet</td>
+                  <td>1.66 KB</td>
+                  <td>208ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/webapi/kv/config.js">https://arplatsaassit4.club/webapi/kv/config.js</td>
+                  <td>Script</td>
+                  <td>3.61 KB</td>
+                  <td>230ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/css/index-BP3VLrNu.css">https://arplatsaassit4.club/css/index-BP3VLrNu.css</td>
+                  <td>Stylesheet</td>
+                  <td>64.4 KB</td>
+                  <td>860ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/chunk.util-D3F2UYVj.js">https://arplatsaassit4.club/js/chunk.util-D3F2UYVj.js</td>
+                  <td>Script</td>
+                  <td>107.07 KB</td>
+                  <td>931ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/index-Bs5Pruli.js">https://arplatsaassit4.club/js/index-Bs5Pruli.js</td>
+                  <td>Script</td>
+                  <td>162.91 KB</td>
+                  <td>976ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015">https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015</td>
+                  <td>Script</td>
+                  <td>6.94 KB</td>
+                  <td>1008ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/en-EPrljrRh.js">https://arplatsaassit4.club/js/en-EPrljrRh.js</td>
+                  <td>Script</td>
+                  <td>31.73 KB</td>
+                  <td>172ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/useHomeBasic-B_XRalzS.js">https://arplatsaassit4.club/js/useHomeBasic-B_XRalzS.js</td>
+                  <td>Script</td>
+                  <td>892 B</td>
+                  <td>170ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/avatar-CR0HO6si.js">https://arplatsaassit4.club/js/avatar-CR0HO6si.js</td>
+                  <td>Script</td>
+                  <td>1.17 KB</td>
+                  <td>170ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/useGame-BnONvMNs.js">https://arplatsaassit4.club/js/useGame-BnONvMNs.js</td>
+                  <td>Script</td>
+                  <td>3.8 KB</td>
+                  <td>169ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/index-LK4vXekN.js">https://arplatsaassit4.club/js/index-LK4vXekN.js</td>
+                  <td>Script</td>
+                  <td>689 B</td>
+                  <td>172ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/level--T9c8KfQ.js">https://arplatsaassit4.club/js/level--T9c8KfQ.js</td>
+                  <td>Script</td>
+                  <td>1.43 KB</td>
+                  <td>172ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/bindPassword-DegbcXvU.js">https://arplatsaassit4.club/js/bindPassword-DegbcXvU.js</td>
+                  <td>Script</td>
+                  <td>1.68 KB</td>
+                  <td>173ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/css/bindPassword-DSzQcXOG.css">https://arplatsaassit4.club/css/bindPassword-DSzQcXOG.css</td>
+                  <td>Stylesheet</td>
+                  <td>598 B</td>
+                  <td>173ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/layoutWarning-CM-eennu.js">https://arplatsaassit4.club/js/layoutWarning-CM-eennu.js</td>
+                  <td>Script</td>
+                  <td>1.1 KB</td>
+                  <td>174ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/css/bindEmail-BO1_jXMO.css">https://arplatsaassit4.club/css/bindEmail-BO1_jXMO.css</td>
+                  <td>Stylesheet</td>
+                  <td>603 B</td>
+                  <td>174ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/link.utils-CGbvclrj.js">https://arplatsaassit4.club/js/link.utils-CGbvclrj.js</td>
+                  <td>Script</td>
+                  <td>631 B</td>
+                  <td>174ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/useNotifications-CnqfZC4F.js">https://arplatsaassit4.club/js/useNotifications-CnqfZC4F.js</td>
+                  <td>Script</td>
+                  <td>1.06 KB</td>
+                  <td>174ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/platform_down-C6N1kCun.js">https://arplatsaassit4.club/js/platform_down-C6N1kCun.js</td>
+                  <td>Script</td>
+                  <td>571 B</td>
+                  <td>174ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/css/accountAndSecurity-BAbilv0V.css">https://arplatsaassit4.club/css/accountAndSecurity-BAbilv0V.css</td>
+                  <td>Stylesheet</td>
+                  <td>670 B</td>
+                  <td>175ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/css/index-B4ZpcyPO.css">https://arplatsaassit4.club/css/index-B4ZpcyPO.css</td>
+                  <td>Stylesheet</td>
+                  <td>896 B</td>
+                  <td>175ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/open2-DBKWGPvq.js">https://arplatsaassit4.club/js/open2-DBKWGPvq.js</td>
+                  <td>Script</td>
+                  <td>520 B</td>
+                  <td>179ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/css/index-xz7FiGTx.css">https://arplatsaassit4.club/css/index-xz7FiGTx.css</td>
+                  <td>Stylesheet</td>
+                  <td>1.16 KB</td>
+                  <td>179ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/css/level-DHfTL0kB.css">https://arplatsaassit4.club/css/level-DHfTL0kB.css</td>
+                  <td>Stylesheet</td>
+                  <td>13.2 KB</td>
+                  <td>179ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/css/settings-Dd8FdlGS.css">https://arplatsaassit4.club/css/settings-Dd8FdlGS.css</td>
+                  <td>Stylesheet</td>
+                  <td>791 B</td>
+                  <td>185ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/settings-DAYbNSQC.js">https://arplatsaassit4.club/js/settings-DAYbNSQC.js</td>
+                  <td>Script</td>
+                  <td>1.23 KB</td>
+                  <td>186ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/index-DUum_wbU.js">https://arplatsaassit4.club/js/index-DUum_wbU.js</td>
+                  <td>Script</td>
+                  <td>1.35 KB</td>
+                  <td>187ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/accountAndSecurity-C52LYhYS.js">https://arplatsaassit4.club/js/accountAndSecurity-C52LYhYS.js</td>
+                  <td>Script</td>
+                  <td>1.29 KB</td>
+                  <td>188ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/css/avatar-DKHfd5q4.css">https://arplatsaassit4.club/css/avatar-DKHfd5q4.css</td>
+                  <td>Stylesheet</td>
+                  <td>1.04 KB</td>
+                  <td>189ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/index-CCNQEIS2.js">https://arplatsaassit4.club/js/index-CCNQEIS2.js</td>
+                  <td>Script</td>
+                  <td>6.03 KB</td>
+                  <td>189ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/common-DuAQ1WJZ.js">https://arplatsaassit4.club/js/common-DuAQ1WJZ.js</td>
+                  <td>Script</td>
+                  <td>14.87 KB</td>
+                  <td>192ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/index-U4Kul0y9.js">https://arplatsaassit4.club/js/index-U4Kul0y9.js</td>
+                  <td>Script</td>
+                  <td>818 B</td>
+                  <td>213ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/css/index-BdThaotF.css">https://arplatsaassit4.club/css/index-BdThaotF.css</td>
+                  <td>Stylesheet</td>
+                  <td>807 B</td>
+                  <td>220ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/index-Cld_K-rF.js">https://arplatsaassit4.club/js/index-Cld_K-rF.js</td>
+                  <td>Script</td>
+                  <td>1.08 KB</td>
+                  <td>220ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/index-CQ9cMQKj.js">https://arplatsaassit4.club/js/index-CQ9cMQKj.js</td>
+                  <td>Script</td>
+                  <td>1.89 KB</td>
+                  <td>220ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/inde-B55-M6r5.js">https://arplatsaassit4.club/js/inde-B55-M6r5.js</td>
+                  <td>Script</td>
+                  <td>1.26 KB</td>
+                  <td>220ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/css/inde-yBUuiYQP.css">https://arplatsaassit4.club/css/inde-yBUuiYQP.css</td>
+                  <td>Stylesheet</td>
+                  <td>3.39 KB</td>
+                  <td>223ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/active-BH8N4CSW.js">https://arplatsaassit4.club/js/active-BH8N4CSW.js</td>
+                  <td>Script</td>
+                  <td>530 B</td>
+                  <td>224ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/css/index-J_iZo5or.css">https://arplatsaassit4.club/css/index-J_iZo5or.css</td>
+                  <td>Stylesheet</td>
+                  <td>23.99 KB</td>
+                  <td>228ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/css/index-BTuCwPgL.css">https://arplatsaassit4.club/css/index-BTuCwPgL.css</td>
+                  <td>Stylesheet</td>
+                  <td>7.68 KB</td>
+                  <td>234ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/arDialog-BD_Gpu1M.js">https://arplatsaassit4.club/js/arDialog-BD_Gpu1M.js</td>
+                  <td>Script</td>
+                  <td>1.65 KB</td>
+                  <td>234ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/index-BpPgUdx9.js">https://arplatsaassit4.club/js/index-BpPgUdx9.js</td>
+                  <td>Script</td>
+                  <td>13.03 KB</td>
+                  <td>237ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/rank_avatar-DrmTN15x.js">https://arplatsaassit4.club/js/rank_avatar-DrmTN15x.js</td>
+                  <td>Script</td>
+                  <td>539 B</td>
+                  <td>237ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/pre-Cx43bc3h.js">https://arplatsaassit4.club/js/pre-Cx43bc3h.js</td>
+                  <td>Script</td>
+                  <td>524 B</td>
+                  <td>239ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/open-BffjUspK.js">https://arplatsaassit4.club/js/open-BffjUspK.js</td>
+                  <td>Script</td>
+                  <td>518 B</td>
+                  <td>238ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/css/layoutWarning-Bx-6mTK3.css">https://arplatsaassit4.club/css/layoutWarning-Bx-6mTK3.css</td>
+                  <td>Stylesheet</td>
+                  <td>708 B</td>
+                  <td>239ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/menus-CTOVviZW.js">https://arplatsaassit4.club/js/menus-CTOVviZW.js</td>
+                  <td>Script</td>
+                  <td>2.68 KB</td>
+                  <td>240ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/js/useRechargeGift-Bl7fDDIu.js">https://arplatsaassit4.club/js/useRechargeGift-Bl7fDDIu.js</td>
+                  <td>Script</td>
+                  <td>2.54 KB</td>
+                  <td>239ms</td>
+                </tr>
+              
+                <tr>
+                  <td><span class="status-badge completed">completed</span></td>
+                  <td>GET</td>
+                  <td class="url-cell" title="https://arplatsaassit4.club/css/menus-Cbjjww4S.css">https://arplatsaassit4.club/css/menus-Cbjjww4S.css</td>
+                  <td>Stylesheet</td>
+                  <td>2.34 KB</td>
+                  <td>245ms</td>
+                </tr>
+              
+            </tbody>
+          </table>
+        </div>
+      </div>
+    
+        </div>
+    </div>
+
+    <div class="modal" id="imageModal" onclick="closeModal()">
+        <span class="modal-close">&times;</span>
+        <img id="modalImage" src="">
+    </div>
+
+    <script>
+        function showTab(tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        }
+        function toggleTest(el) { el.nextElementSibling.classList.toggle('open'); }
+        function openImage(src) {
+            document.getElementById('modalImage').src = src;
+            document.getElementById('imageModal').classList.add('open');
+        }
+        function closeModal() { document.getElementById('imageModal').classList.remove('open'); }
+    </script>
+</body>
+</html>
