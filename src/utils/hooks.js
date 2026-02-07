@@ -1,0 +1,51 @@
+// src/utils/hooks.js
+import { AuthHelper } from './auth.js';
+import { dataConfig } from '../../config.js';
+
+export class TestHooks {
+    constructor(testCase) {
+        this.t = testCase;
+        this.auth = new AuthHelper(testCase);
+    }
+
+    setupNetworkFilter(filters = null) {
+        const defaultFilters = [
+            /^https:\/\/arplatsaassit4\.club\/api\/.*/i,
+            /\/api\//i
+        ];
+        this.t.setNetworkFilter(filters || defaultFilters);
+    }
+
+    /**
+     * 标准前置处理
+     * 产生页面：首页 → 登录页 → 登录成功页
+     */
+    async standardSetup(options = {}) {
+        const { needLogin = true, networkFilters = null } = options;
+
+        this.setupNetworkFilter(networkFilters);
+
+        if (needLogin) {
+            const success = await this.auth.login();
+            if (!success) throw new Error('登录失败');
+        }
+
+        return this.auth;
+    }
+
+    /**
+     * 只访问首页
+     */
+    async gotoHomePageOnly() {
+        this.setupNetworkFilter();
+        await this.t.goto(dataConfig.url, { pageName: '首页' });
+        await this.auth.handlePopups();
+    }
+
+    /**
+     * 完成当前页面
+     */
+    async finishCurrentPage() {
+        await this.t.finishCurrentPage(true);
+    }
+}
