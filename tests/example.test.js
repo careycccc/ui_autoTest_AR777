@@ -1,58 +1,43 @@
-/**
- * 示例测试用例 - 展示各种断言和操作
- */
-export default async function(t) {
+export default async function (test) {
 
-  // 故意失败的测试用例（演示错误截图）
-  t.test('故意失败的测试 - 演示错误截图', async () => {
-    await t.goto('https://www.baidu.com');
-    
-    await t.step('这一步会通过', async () => {
-      await t.assert.visible('#kw');
+  test('多页面性能测试示例', async () => {
+
+    // ===== 第一个页面 =====
+    await test.goto('https://www.google.com', { pageName: 'Google 首页' });
+
+    await test.step('输入搜索关键词', async () => {
+      await test.page.fill('textarea[name="q"]', 'Playwright automation');
     });
-    
-    await t.step('这一步会失败', async () => {
-      // 故意查找不存在的元素
-      await t.assert.visible('#not-exist-element', '这个元素不存在');
+
+    // ===== 切换到第二个页面 =====
+    await test.clickAndSwitchTo('搜索结果页',
+      async () => {
+        await test.page.keyboard.press('Enter');
+      },
+      {
+        waitForSelector: '#search',
+        waitTime: 2000
+      }
+    );
+
+    await test.step('验证搜索结果', async () => {
+      await test.assert.visible('#search');
     });
+
+    // ===== 切换到第三个页面 =====
+    await test.clickAndSwitchTo('图片搜索页',
+      async () => {
+        await test.page.click('a:has-text("图片")');
+      },
+      {
+        waitTime: 2000
+      }
+    );
+
+    await test.step('验证图片页面', async () => {
+      await test.waitForTimeout(1000);
+    });
+
+    // 最后一个页面会在测试结束时自动采集
   });
-
-  // 演示各种断言
-  t.test('断言功能演示', async () => {
-    await t.goto('https://www.baidu.com');
-    
-    await t.step('基础断言', async () => {
-      t.assert.equal(1 + 1, 2, '1+1应该等于2');
-      t.assert.ok(true, '值应该为真');
-      t.assert.includes([1, 2, 3], 2, '数组应该包含2');
-    });
-    
-    await t.step('页面断言', async () => {
-      await t.assert.urlContains('baidu.com');
-      await t.assert.titleContains('百度');
-    });
-    
-    await t.step('元素断言', async () => {
-      await t.assert.visible('#kw');
-      await t.assert.enabled('#kw');
-      await t.assert.exists('#su');
-    });
-  });
-
-  // 演示网络请求监控
-  t.test('网络请求监控演示', async () => {
-    // 清空之前的请求
-    t.clearNetworkRequests();
-    
-    await t.goto('https://www.baidu.com');
-    
-    await t.step('查看网络请求', async () => {
-      const requests = t.getNetworkRequests();
-      console.log('      📡 共捕获 ' + requests.length + ' 个网络请求');
-      
-      // 检查是否有请求
-      t.assert.ok(requests.length > 0, '应该有网络请求');
-    });
-  });
-
 }
