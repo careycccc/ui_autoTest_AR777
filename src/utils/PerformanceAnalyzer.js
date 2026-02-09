@@ -152,6 +152,7 @@ export class PerformanceAnalyzer {
 
   analyzeLCP(perfData) {
     const wv = perfData.webVitals || {};
+    const nav = perfData.navigation || {};
     const value = wv.lcp;
     const lcpDetails = perfData.lcpElementDetails;
     const lcpResource = perfData.lcpResourceTiming;
@@ -168,34 +169,94 @@ export class PerformanceAnalyzer {
       causes: [], details: [], suggestions: []
     };
 
-    if (lcpDetails) {
-      if (lcpDetails.isImage && lcpResource) {
-        issue.description = `LCP 元素是图片 <${lcpDetails.tag}>`;
-        issue.details.push({
-          label: '🖼️ LCP 图片详情',
-          items: [
-            `URL: ${this.shortenUrl(lcpResource.url, 60)}`,
-            `总耗时: ${Math.round(lcpResource.duration)}ms`,
-            `TTFB: ${Math.round(lcpResource.ttfb)}ms`,
-            `下载: ${Math.round(lcpResource.downloadTime)}ms`,
-            `大小: ${this.formatSize(lcpResource.transferSize)}`
-          ]
-        });
-        
-        if (lcpResource.ttfb > 500) {
-          issue.causes.push({ reason: '图片服务器响应慢', detail: `TTFB ${Math.round(lcpResource.ttfb)}ms`, suggestion: '使用 CDN' });
-        }
-        if (lcpResource.downloadTime > 1000) {
-          issue.causes.push({ reason: '图片下载慢', detail: `${Math.round(lcpResource.downloadTime)}ms, ${this.formatSize(lcpResource.transferSize)}`, suggestion: '压缩图片' });
-        }
+    // 按 Chrome DevTools 的方式分解 LCP:
+    // LCP = TTFB + 资源加载延迟 + 资源加载时长 + 元素渲染延迟
+    const ttfb = Math.round(nav.ttfb || wv.ttfb || 0);
+
+    if (lcpDetails && lcpDetails.isImage && lcpResource) {
+      // LCP 元素是图片
+      const resourceStart = Math.round(lcpResource.startTime || 0);
+      const resourceTTFB = Math.round(lcpResource.ttfb || 0);
+      const resourceDownload = Math.round(lcpResource.downloadTime || 0);
+      const resourceEnd = Math.round(lcpResource.responseEnd || (resourceStart + lcpResource.duration));
+      const resourceLoadDelay = Math.max(0, resourceStart - ttfb);
+      const resourceLoadTime = resourceTTFB + resourceDownload;
+      const renderDelay = Math.max(0, Math.round(value) - resourceEnd);
+
+      issue.description = `LCP 元素是图片 <${lcpDetails.tag}>`;
+      issue.details.push({
+        label: '⏱️ LCP 时间分解（Chrome DevTools 标准）',
+        items: [
+          `① TTFB (首字节时间): ${ttfb}ms`,
+          `② 资源加载延迟: ${resourceLoadDelay}ms`,
+          `③ 资源加载时长: ${resourceLoadTime}ms (TTFB ${resourceTTFB}ms + 下载 ${resourceDownload}ms)`,
+          `④ 元素渲染延迟: ${renderDelay}ms`,
+          `─────────────────`,
+          `合计 ≈ ${ttfb + resourceLoadDelay + resourceLoadTime + renderDelay}ms (LCP: ${Math.round(value)}ms)`
+        ]
+      });
+
+      issue.details.push({
+        label: '🖼️ LCP 图片详情',
+        items: [
+          `URL: ${this.shortenUrl(lcpResource.url, 60)}`,
+          `大小: ${this.formatSize(lcpResource.transferSize)}`
+        ]
+      });
+
+      // 根据哪个阶段耗时最长给出原因
+      if (ttfb > 800) {
+        issue.causes.push({ reason: 'TTFB 过高', detail: `服务器响应耗时 ${ttfb}ms`, suggestion: '优化服务器响应速度或使用 CDN' });
       }
+      if (resourceLoadDelay > 500) {
+        issue.causes.push({ reason: '资源加载延迟大', detail: `图片请求延迟了 ${resourceLoadDelay}ms 才发出`, suggestion: '使用 <link rel="preload"> 预加载 LCP 图片' });
+      }
+      if (resourceLoadTime > 500) {
+        issue.causes.push({ reason: '资源加载耗时长', detail: `下载花了 ${resourceLoadTime}ms`, suggestion: '压缩图片、使用 WebP 格式' });
+      }
+      if (renderDelay > 200) {
+        issue.causes.push({ reason: '元素渲染延迟大', detail: `下载完到渲染花了 ${renderDelay}ms`, suggestion: '减少渲染阻塞的 JS，优化 CSS' });
+      }
+
+    } else if (lcpDetails && lcpDetails.isText) {
+      // LCP 元素是文本
+      const fcp = Math.round(wv.fcp || 0);
+      const renderDelay = Math.max(0, Math.round(value) - fcp);
+
+      issue.description = `LCP 元素是文本 <${lcpDetails.tag}>`;
+      issue.details.push({
+        label: '⏱️ LCP 时间分解',
+        items: [
+          `① TTFB (首字节时间): ${ttfb}ms`,
+          `② FCP (首次绘制): ${fcp}ms`,
+          `③ 渲染延迟 (FCP→LCP): ${renderDelay}ms`,
+          `─────────────────`,
+          `LCP: ${Math.round(value)}ms`
+        ]
+      });
+
+      if (ttfb > 800) {
+        issue.causes.push({ reason: 'TTFB 过高', detail: `${ttfb}ms`, suggestion: '使用 CDN' });
+      }
+
+    } else {
+      // 无法确定 LCP 元素类型
+      issue.details.push({
+        label: '⏱️ LCP 时间分解',
+        items: [
+          `TTFB: ${ttfb}ms`,
+          `LCP: ${Math.round(value)}ms`,
+          `渲染耗时: ${Math.max(0, Math.round(value) - ttfb)}ms`
+        ]
+      });
     }
 
+    // 阻塞资源（补充信息，不作为主要原因）
     const blocking = perfData.blockingResources || [];
     if (blocking.length > 0) {
-      issue.causes.push({
-        reason: `${blocking.length} 个阻塞资源`,
-        resources: blocking.slice(0, 5).map(r => ({ url: this.shortenUrl(r.url, 40), duration: `${Math.round(r.duration)}ms` }))
+      issue.details.push({
+        label: '🚫 渲染阻塞资源',
+        items: blocking.slice(0, 5).map(r => `${this.shortenUrl(r.url, 50)} (${Math.round(r.duration)}ms)`)
       });
     }
 
@@ -221,19 +282,40 @@ export class PerformanceAnalyzer {
       causes: [], details: [], suggestions: []
     };
 
+    // FCP = TTFB + 阻塞资源加载 + 渲染
+    const ttfb = Math.round(nav.ttfb || 0);
+    const blocking = perfData.blockingResources || [];
+    const maxBlockingEnd = blocking.length > 0
+      ? Math.max(...blocking.map(r => Math.round((r.startTime || 0) + (r.duration || 0))))
+      : 0;
+    const blockingTime = Math.max(0, maxBlockingEnd - ttfb);
+    const renderTime = Math.max(0, Math.round(value) - Math.max(ttfb, maxBlockingEnd));
+
     issue.details.push({
-      label: '⏱️ 时间分解',
+      label: '⏱️ FCP 时间分解',
       items: [
-        `DNS: ${Math.round(nav.dnsTime || 0)}ms`,
-        `TCP: ${Math.round(nav.tcpTime || 0)}ms`,
-        `TTFB: ${Math.round(nav.ttfb || 0)}ms`,
-        `下载: ${Math.round(nav.responseTime || nav.downloadTime || 0)}ms`
+        `① TTFB (首字节时间): ${ttfb}ms`,
+        `② 阻塞资源加载: ${blockingTime}ms` + (blocking.length > 0 ? ` (${blocking.length} 个 CSS/JS)` : ''),
+        `③ 渲染耗时: ${renderTime}ms`,
+        `─────────────────`,
+        `合计 ≈ ${ttfb + blockingTime + renderTime}ms (FCP: ${Math.round(value)}ms)`
       ]
     });
 
-    const blocking = perfData.blockingResources || [];
-    if (blocking.length > 0) {
-      issue.causes.push({ reason: `${blocking.length} 个阻塞资源`, resources: blocking.slice(0, 3).map(r => ({ url: this.shortenUrl(r.url, 40), duration: `${Math.round(r.duration)}ms` })) });
+    // 根据哪个阶段最慢给出原因
+    if (ttfb > 800) {
+      issue.causes.push({ reason: 'TTFB 过高', detail: `服务器响应耗时 ${ttfb}ms`, suggestion: '使用 CDN 或优化服务器' });
+    }
+    if (blocking.length > 0 && blockingTime > 500) {
+      issue.causes.push({
+        reason: `${blocking.length} 个阻塞资源延迟了渲染`,
+        detail: `阻塞了 ${blockingTime}ms`,
+        resources: blocking.slice(0, 5).map(r => ({ url: this.shortenUrl(r.url, 40), duration: `${Math.round(r.duration)}ms` })),
+        suggestion: '内联关键 CSS，async/defer 加载 JS'
+      });
+    }
+    if (renderTime > 500) {
+      issue.causes.push({ reason: '渲染耗时较长', detail: `渲染花了 ${renderTime}ms`, suggestion: '减少 DOM 复杂度，优化 CSS' });
     }
 
     issue.suggestions.push('内联关键 CSS', 'async/defer 加载 JS', '使用 CDN');

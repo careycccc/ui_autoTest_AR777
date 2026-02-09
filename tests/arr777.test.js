@@ -1,5 +1,6 @@
 // tests/withBeforeEach.test.js
 import { TestHooks } from '../src/utils/hooks.js';
+import { checkpopu } from '../src/utils/checkpopu.js';
 
 export default async function (test) {
 
@@ -10,46 +11,76 @@ export default async function (test) {
     hooks = new TestHooks(test);
     await hooks.standardSetup();  // 就这一行！
   });
-  test.test('判断登录成功后有没有弹窗', async () => {
+  // View My Bonus
+  test.test('判断登录成功后有没有幸运礼包弹窗', async () => {
     try {
-      // 设置最大尝试次数，防止无限循环
-      const maxAttempts = 5;
-      let attempts = 0;
-      let popupExists = true;
-
-      // 循环检查并处理弹窗，直到弹窗不存在或达到最大尝试次数
-      while (popupExists && attempts < maxAttempts) {
-        attempts++;
-        console.log(`第${attempts}次检查弹窗...`);
-
-        // 检查弹窗是否存在
-        popupExists = await test.page.locator('#popup-mask').isVisible().catch(() => false);
-
-        if (popupExists) {
-          console.log('发现弹窗，正在关闭...');
-          // 点击弹窗关闭按钮
-          await test.page.click('#popup-mask');
-
-          // 等待一小段时间，让弹窗关闭动画完成
-          await test.waitForTimeout(500);
-
+      const result = await test.page.getByText('View My Bonus')
+      if (result) {
+        await test.page.click('text=View My Bonus')
+        // 等待1s后
+        await test.page.waitForTimeout(2000)
+        // 点击弹窗中的关闭按钮
+        const claimButton = test.page.getByText('Claim', { exact: true });
+        if (await claimButton.isVisible()) {
+          await claimButton.click();
+          // 等待2s后,此时进入了幸运礼包的界面
+          await test.page.waitForTimeout(2000)
           // 点击页面左上角，确保焦点返回到页面
           await test.page.mouse.click(30, 30);
-
-          // 再次等待，确保弹窗已完全关闭
-          await test.waitForTimeout(1000);
+          checkpopu(test)
+          //await test.page.waitForTimeout(5000)
         } else {
-          console.log('未发现弹窗，继续执行测试');
+          console.log('未发现幸运礼包弹窗的确定按钮，无法进行点击操作测试');
         }
-      }
-
-      if (attempts >= maxAttempts) {
-        console.warn(`已达到最大尝试次数(${maxAttempts})，停止检查弹窗`);
+      } else {
+        console.log('未发现幸运礼包弹窗，继续执行判断首页有没有其他的弹窗测试');
+        checkpopu(test)
       }
     } catch (e) {
-      console.log('处理首页弹窗时出错:', e);
+      console.log('处理首页幸运礼包弹窗时出错:', e);
     }
-  })
+  }
+  )
+  // test.test('判断登录成功后有没有弹窗', async () => {
+  //   try {
+  //     // 设置最大尝试次数，防止无限循环
+  //     const maxAttempts = 5;
+  //     let attempts = 0;
+  //     let popupExists = true;
+
+  //     // 循环检查并处理弹窗，直到弹窗不存在或达到最大尝试次数
+  //     while (popupExists && attempts < maxAttempts) {
+  //       attempts++;
+  //       console.log(`第${attempts}次检查弹窗...`);
+
+  //       // 检查弹窗是否存在
+  //       popupExists = await test.page.locator('#popup-mask').isVisible().catch(() => false);
+
+  //       if (popupExists) {
+  //         console.log('发现弹窗，正在关闭...');
+  //         // 点击弹窗关闭按钮
+  //         await test.page.click('#popup-mask');
+
+  //         // 等待一小段时间，让弹窗关闭动画完成
+  //         await test.waitForTimeout(500);
+
+  //         // 点击页面左上角，确保焦点返回到页面
+  //         await test.page.mouse.click(30, 30);
+
+  //         // 再次等待，确保弹窗已完全关闭
+  //         await test.waitForTimeout(1000);
+  //       } else {
+  //         console.log('未发现弹窗，继续执行测试');
+  //       }
+  //     }
+
+  //     if (attempts >= maxAttempts) {
+  //       console.warn(`已达到最大尝试次数(${maxAttempts})，停止检查弹窗`);
+  //     }
+  //   } catch (e) {
+  //     console.log('处理首页弹窗时出错:', e);
+  //   }
+  // })
 
 
   // test.test('测试1: 查看余额', async () => {

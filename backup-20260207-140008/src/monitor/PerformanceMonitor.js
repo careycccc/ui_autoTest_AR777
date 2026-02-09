@@ -14,13 +14,13 @@ export class PerformanceMonitor {
     try {
       this.cdpSession = await this.page.context().newCDPSession(this.page);
       await this.cdpSession.send('Performance.enable');
-      
+
       const { metrics } = await this.cdpSession.send('Performance.getMetrics');
       this.startMetrics = {};
       metrics.forEach(m => this.startMetrics[m.name] = m.value);
       this.startTimestamp = Date.now();
       this.pageStartTime = Date.now();
-      
+
       this.isInitialized = true;
     } catch (e) {
       console.warn('性能监控初始化失败:', e.message);
@@ -35,10 +35,10 @@ export class PerformanceMonitor {
         return performance.getEntriesByType('resource').map(r => r.name);
       });
       this.resourcesBeforeSwitch = new Set(currentResources);
-      
+
       // 重置开始时间
       this.pageStartTime = Date.now();
-      
+
       // 重置 CDP 指标基准
       if (this.cdpSession) {
         const { metrics } = await this.cdpSession.send('Performance.getMetrics');
@@ -46,28 +46,44 @@ export class PerformanceMonitor {
         metrics.forEach(m => this.startMetrics[m.name] = m.value);
         this.startTimestamp = Date.now();
       }
-      
+
       // 重置页面内的性能数据
       await this.page.evaluate(() => {
         window.__perfMonitorInitialized = false;
         window.__perfMonitor = null;
         window.__pageLoadStartTime = Date.now();
       });
-      
+
+
     } catch (e) {
       console.warn('重置性能监控失败:', e.message);
     }
   }
+  /**
+ * 标记性能采集的真正起点（在所有 waitForTimeout 之后调用）
+ */
+  async markCollectStart() {
+    this.pageStartTime = Date.now();
+    this.startTimestamp = Date.now();
+
+    // 重置 CDP 基准
+    if (this.cdpSession) {
+      const { metrics } = await this.cdpSession.send('Performance.getMetrics');
+      this.startMetrics = {};
+      metrics.forEach(m => this.startMetrics[m.name] = m.value);
+    }
+  }
+
 
   async injectWebVitals() {
     try {
       await this.page.evaluate(() => {
         // 强制重新初始化
         const startTime = window.__pageLoadStartTime || performance.now();
-        
+
         window.__perfMonitor = {
           pageStartTime: startTime,
-          
+
           // Web Vitals - 每个页面独立
           lcp: null,
           lcpElementDetails: null,
@@ -80,10 +96,10 @@ export class PerformanceMonitor {
           fidDetails: null,
           inp: null,
           ttfb: null,
-          
+
           // 导航时序
           navigation: {},
-          
+
           // 资源
           resources: [],
           resourcesByType: {},
@@ -92,15 +108,15 @@ export class PerformanceMonitor {
           largeResources: [],
           blockingResources: [],
           newResources: [], // 页面切换后新加载的资源
-          
+
           // DOM
           domStats: {},
           heavyElements: [],
-          
+
           // 长任务
           longTasks: [],
           longTasksAfterSwitch: [],
-          
+
           // 交互
           interactions: []
         };
@@ -131,7 +147,7 @@ export class PerformanceMonitor {
             };
             window.__perfMonitor.ttfb = nav.responseStart;
           }
-        } catch (e) {}
+        } catch (e) { }
 
         // ====== Paint Timing ======
         try {
@@ -144,21 +160,21 @@ export class PerformanceMonitor {
               window.__perfMonitor.fcp = p.startTime;
             }
           }
-        } catch (e) {}
+        } catch (e) { }
 
         // ====== 资源分析 ======
         try {
           const resources = performance.getEntriesByType('resource');
           const resourcesByType = { script: [], css: [], image: [], font: [], xhr: [], fetch: [], other: [] };
           let totalSize = 0;
-          
+
           // 获取之前的资源列表（用于识别新资源）
           const existingResources = window.__existingResources || new Set();
-          
+
           for (const r of resources) {
             const isNew = !existingResources.has(r.name);
             let size = r.transferSize || r.encodedBodySize || 0;
-            
+
             const info = {
               url: r.name,
               shortUrl: r.name.split('?')[0].split('/').pop() || r.name.substring(0, 50),
@@ -176,14 +192,14 @@ export class PerformanceMonitor {
               protocol: r.nextHopProtocol,
               isNew: isNew
             };
-            
+
             totalSize += size || 0;
             window.__perfMonitor.resources.push(info);
-            
+
             if (isNew) {
               window.__perfMonitor.newResources.push(info);
             }
-            
+
             // 分类
             const type = r.initiatorType;
             if (type === 'script') resourcesByType.script.push(info);
@@ -193,12 +209,12 @@ export class PerformanceMonitor {
             else if (type === 'xmlhttprequest') resourcesByType.xhr.push(info);
             else if (type === 'fetch') resourcesByType.fetch.push(info);
             else resourcesByType.other.push(info);
-            
+
             if (r.duration > 500) window.__perfMonitor.slowResources.push(info);
             if (size > 100 * 1024) window.__perfMonitor.largeResources.push(info);
             if (r.renderBlockingStatus === 'blocking') window.__perfMonitor.blockingResources.push(info);
           }
-          
+
           window.__perfMonitor.resourcesByType = resourcesByType;
           window.__perfMonitor.resourceStats = {
             total: resources.length,
@@ -213,10 +229,10 @@ export class PerformanceMonitor {
               fetch: { count: resourcesByType.fetch.length, size: resourcesByType.fetch.reduce((s, r) => s + (r.transferSize || 0), 0) }
             }
           };
-          
+
           // 更新已存在的资源列表
           window.__existingResources = new Set(resources.map(r => r.name));
-        } catch (e) {}
+        } catch (e) { }
 
         // ====== DOM 分析 ======
         try {
@@ -226,11 +242,11 @@ export class PerformanceMonitor {
           let deepestElement = null;
           let maxChildren = 0;
           let widestElement = null;
-          
+
           allElements.forEach(el => {
             const tag = el.tagName.toLowerCase();
             tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-            
+
             let depth = 0;
             let parent = el;
             while (parent.parentElement) {
@@ -241,13 +257,13 @@ export class PerformanceMonitor {
               maxDepth = depth;
               deepestElement = { tag: el.tagName, id: el.id, class: el.className?.split?.(' ')?.[0] || '', depth };
             }
-            
+
             if (el.children.length > maxChildren) {
               maxChildren = el.children.length;
               widestElement = { tag: el.tagName, id: el.id, class: el.className?.split?.(' ')?.[0] || '', children: maxChildren };
             }
           });
-          
+
           const heavyElements = [];
           allElements.forEach(el => {
             const childCount = el.querySelectorAll('*').length;
@@ -264,7 +280,7 @@ export class PerformanceMonitor {
             }
           });
           heavyElements.sort((a, b) => b.childCount - a.childCount);
-          
+
           window.__perfMonitor.heavyElements = heavyElements.slice(0, 10);
           window.__perfMonitor.domStats = {
             totalNodes: allElements.length,
@@ -275,14 +291,14 @@ export class PerformanceMonitor {
             tagCounts,
             issues: []
           };
-          
+
           if (allElements.length > 1500) {
             window.__perfMonitor.domStats.issues.push({ type: 'too_many_nodes', message: `DOM 节点过多: ${allElements.length} 个` });
           }
           if (maxDepth > 15) {
             window.__perfMonitor.domStats.issues.push({ type: 'too_deep', message: `DOM 嵌套过深: ${maxDepth} 层` });
           }
-          
+
           const imagesWithoutSize = document.querySelectorAll('img:not([width]):not([height])');
           if (imagesWithoutSize.length > 0) {
             window.__perfMonitor.domStats.issues.push({
@@ -291,7 +307,7 @@ export class PerformanceMonitor {
               images: Array.from(imagesWithoutSize).slice(0, 5).map(img => ({ src: img.src?.split('/').pop()?.substring(0, 30) || 'unknown' }))
             });
           }
-        } catch (e) {}
+        } catch (e) { }
 
         // ====== LCP Observer（重新注册）======
         try {
@@ -303,12 +319,12 @@ export class PerformanceMonitor {
               // 相对于页面切换时间计算
               const lcpTime = entry.startTime;
               window.__perfMonitor.lcp = lcpTime;
-              
+
               if (entry.element) {
                 const el = entry.element;
                 const style = window.getComputedStyle(el);
                 const rect = el.getBoundingClientRect();
-                
+
                 window.__perfMonitor.lcpElementDetails = {
                   tag: el.tagName,
                   id: el.id || null,
@@ -318,12 +334,12 @@ export class PerformanceMonitor {
                   imageNaturalSize: el.tagName === 'IMG' ? el.naturalWidth + 'x' + el.naturalHeight : null,
                   hasBackgroundImage: style.backgroundImage !== 'none',
                   backgroundImage: style.backgroundImage !== 'none' ? style.backgroundImage : null,
-                  isText: ['H1','H2','H3','H4','H5','H6','P','SPAN','DIV'].includes(el.tagName),
+                  isText: ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P', 'SPAN', 'DIV'].includes(el.tagName),
                   textContent: el.innerText?.substring(0, 100) || null,
                   fontFamily: style.fontFamily,
                   rect: { width: Math.round(rect.width), height: Math.round(rect.height) }
                 };
-                
+
                 if (el.tagName === 'IMG' && el.src) {
                   const imgResource = performance.getEntriesByName(el.src)[0];
                   if (imgResource) {
@@ -340,14 +356,14 @@ export class PerformanceMonitor {
             }
           });
           window.__lcpObserver.observe({ type: 'largest-contentful-paint', buffered: true });
-        } catch (e) {}
+        } catch (e) { }
 
         // ====== CLS Observer（重置值）======
         try {
           if (window.__clsObserver) window.__clsObserver.disconnect();
           window.__perfMonitor.cls = 0;
           window.__perfMonitor.clsEntries = [];
-          
+
           window.__clsObserver = new PerformanceObserver((list) => {
             for (const entry of list.getEntries()) {
               if (!entry.hadRecentInput) {
@@ -366,7 +382,7 @@ export class PerformanceMonitor {
             }
           });
           window.__clsObserver.observe({ type: 'layout-shift', buffered: false }); // 不要 buffered，只记录新的
-        } catch (e) {}
+        } catch (e) { }
 
         // ====== FID Observer ======
         try {
@@ -383,14 +399,14 @@ export class PerformanceMonitor {
             }
           });
           window.__fidObserver.observe({ type: 'first-input', buffered: false });
-        } catch (e) {}
+        } catch (e) { }
 
         // ====== INP Observer（重置）======
         try {
           if (window.__inpObserver) window.__inpObserver.disconnect();
           window.__perfMonitor.inp = null;
           window.__perfMonitor.interactions = [];
-          
+
           window.__inpObserver = new PerformanceObserver((list) => {
             for (const entry of list.getEntries()) {
               const duration = entry.duration;
@@ -407,13 +423,13 @@ export class PerformanceMonitor {
             }
           });
           window.__inpObserver.observe({ type: 'event', buffered: false, durationThreshold: 16 });
-        } catch (e) {}
+        } catch (e) { }
 
         // ====== Long Tasks Observer（重置）======
         try {
           if (window.__longTaskObserver) window.__longTaskObserver.disconnect();
           window.__perfMonitor.longTasks = [];
-          
+
           window.__longTaskObserver = new PerformanceObserver((list) => {
             for (const entry of list.getEntries()) {
               let source = 'unknown';
@@ -429,11 +445,11 @@ export class PerformanceMonitor {
             }
           });
           window.__longTaskObserver.observe({ type: 'longtask', buffered: false });
-        } catch (e) {}
+        } catch (e) { }
 
         window.__perfMonitorInitialized = true;
       });
-      
+
       await this.page.waitForTimeout(500);
     } catch (e) {
       console.warn('注入性能监控失败:', e.message);
@@ -444,31 +460,31 @@ export class PerformanceMonitor {
   async collectSPAMetrics() {
     const now = Date.now();
     const pageLoadTime = now - this.pageStartTime;
-    
+
     return await this.page.evaluate((loadTime) => {
       const pm = window.__perfMonitor || {};
-      
+
       // 对于 SPA 页面切换，模拟一些关键指标
       const result = {
         // 页面切换后的新资源加载时间
         pageLoadTime: loadTime,
         newResourcesLoadTime: 0,
         largestNewResource: null,
-        
+
         // 当前 DOM 状态
         currentDomNodes: document.querySelectorAll('*').length,
-        
+
         // 新加载的资源统计
         newResourcesCount: pm.newResources?.length || 0,
         newResourcesTotalSize: 0
       };
-      
+
       if (pm.newResources && pm.newResources.length > 0) {
         // 计算新资源的最大加载时间
         let maxDuration = 0;
         let largestResource = null;
         let totalSize = 0;
-        
+
         pm.newResources.forEach(r => {
           totalSize += r.transferSize || 0;
           if (r.duration > maxDuration) {
@@ -476,12 +492,12 @@ export class PerformanceMonitor {
             largestResource = r;
           }
         });
-        
+
         result.newResourcesLoadTime = maxDuration;
         result.largestNewResource = largestResource;
         result.newResourcesTotalSize = totalSize;
       }
-      
+
       return result;
     }, pageLoadTime);
   }
@@ -492,7 +508,7 @@ export class PerformanceMonitor {
       url: this.page.url(),
       isSPA: false,
       pageLoadTime: Date.now() - this.pageStartTime,
-      
+
       webVitals: { lcp: null, fcp: null, cls: null, fid: null, inp: null, ttfb: null },
       navigation: {},
       memory: {},
@@ -500,7 +516,7 @@ export class PerformanceMonitor {
       render: {},
       cpu: {},
       fps: {},
-      
+
       firstPaint: null,
       lcpElementDetails: null,
       lcpResourceTiming: null,
@@ -508,7 +524,7 @@ export class PerformanceMonitor {
       fidDetails: null,
       longTasks: [],
       interactions: [],
-      
+
       resources: [],
       resourcesByType: {},
       resourceStats: {},
@@ -516,10 +532,10 @@ export class PerformanceMonitor {
       largeResources: [],
       blockingResources: [],
       newResources: [],
-      
+
       domStats: {},
       heavyElements: [],
-      
+
       // SPA 特有指标
       spaMetrics: null
     };
@@ -550,13 +566,13 @@ export class PerformanceMonitor {
           const elapsed = Date.now() - this.startTimestamp;
           const scriptDelta = ((m.ScriptDuration || 0) - (this.startMetrics.ScriptDuration || 0)) * 1000;
           const taskDelta = ((m.TaskDuration || 0) - (this.startMetrics.TaskDuration || 0)) * 1000;
-          
+
           result.cpu = {
             scriptDuration: Math.round(scriptDelta),
             taskDuration: Math.round(taskDelta),
             usage: elapsed > 0 ? Math.min(100, Math.round((scriptDelta / elapsed) * 100)) : 0
           };
-          
+
           // 计算相对于页面切换后的渲染指标
           result.render.layoutCountSinceSwitch = Math.round((m.LayoutCount || 0) - (this.startMetrics.LayoutCount || 0));
           result.render.recalcStyleCountSinceSwitch = Math.round((m.RecalcStyleCount || 0) - (this.startMetrics.RecalcStyleCount || 0));
@@ -573,7 +589,7 @@ export class PerformanceMonitor {
       const pageData = await this.page.evaluate(() => {
         const pm = window.__perfMonitor || {};
         const perf = performance;
-        
+
         let memory = null;
         if (perf.memory) {
           memory = {
@@ -582,7 +598,7 @@ export class PerformanceMonitor {
             jsHeapSizeLimit: perf.memory.jsHeapSizeLimit
           };
         }
-        
+
         return {
           webVitals: {
             lcp: pm.lcp,
@@ -620,7 +636,7 @@ export class PerformanceMonitor {
       // 合并数据
       Object.assign(result.webVitals, pageData.webVitals);
       Object.assign(result.navigation, pageData.navigation);
-      
+
       if (pageData.memory) {
         result.memory = { ...result.memory, ...pageData.memory };
         if (pageData.memory.usedJSHeapSize) {
@@ -653,7 +669,7 @@ export class PerformanceMonitor {
       // FPS
       try {
         result.fps.current = await this.measureFPS();
-      } catch (e) {}
+      } catch (e) { }
 
     } catch (e) {
       console.warn('采集性能数据失败:', e.message);
@@ -683,7 +699,7 @@ export class PerformanceMonitor {
 
   async stop() {
     if (this.cdpSession) {
-      try { await this.cdpSession.send('Performance.disable'); } catch (e) {}
+      try { await this.cdpSession.send('Performance.disable'); } catch (e) { }
     }
   }
 }

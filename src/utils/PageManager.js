@@ -3,13 +3,68 @@ export class PageManager {
     this.t = testCase;
     this.page = testCase.page;
   }
+  // 页面切换
+  // async switchTo(pageName, options = {}) {
+  //   const {
+  //     waitForSelector = null,
+  //     waitForUrl = null,
+  //     waitForResponse = null,
+  //     waitTime = 2000,
+  //     collectPreviousPage = true,
+  //     takeScreenshot = true
+  //   } = options;
 
+  //   console.log(`\n      🔄 页面切换: → ${pageName}`);
+
+  //   // 1. 完成上一个页面的记录
+  //   if (collectPreviousPage && this.t.currentPageRecord) {
+  //     await this.finishCurrentPage(takeScreenshot);
+  //   }
+
+  //   // 2. 等待新页面稳定
+  //   await this.waitForPageReady(options);
+
+  //   // 3. 重置性能监控（关键！）
+  //   await this.t.performanceMonitor.reset();
+
+  //   // 4. 创建新页面记录
+  //   this.t.createPageRecord(pageName);
+
+  //   // 5. 重新初始化性能监控
+  //   await this.t.performanceMonitor.start();
+  //   await this.t.performanceMonitor.injectWebVitals();
+
+  //   // 6. 等待页面稳定
+  //   if (waitTime > 0) {
+  //     await this.page.waitForTimeout(waitTime);
+  //   }
+
+  //   // 7. 等待更多时间让性能数据收集
+  //   await this.page.waitForTimeout(500);
+
+  //   // 8. 采集初始性能数据
+  //   await this.collectInitialPerformance(pageName);
+
+  //   // 9. 截图
+  //   // if (takeScreenshot) {
+  //   //   await this.takePageScreenshot(pageName, 'loaded');
+  //   // }
+  //   // 9. 截图 - 每个页面只截一张
+  //   if (takeScreenshot && !this.t.currentPageRecord?.screenshotTaken) {
+  //     await this.takePageScreenshot(pageName, 'loaded');
+  //     if (this.t.currentPageRecord) {
+  //       this.t.currentPageRecord.screenshotTaken = true;
+  //     }
+  //   }
+
+  //   console.log(`      ✓ 已进入: ${pageName}`);
+  // }
   async switchTo(pageName, options = {}) {
     const {
       waitForSelector = null,
       waitForUrl = null,
       waitForResponse = null,
-      waitTime = 2000,
+      waitTime = 500,
       collectPreviousPage = true,
       takeScreenshot = true
     } = options;
@@ -24,34 +79,32 @@ export class PageManager {
     // 2. 等待新页面稳定
     await this.waitForPageReady(options);
 
-    // 3. 重置性能监控（关键！）
+    // 3. 重置性能监控 + 记录切换时间
     await this.t.performanceMonitor.reset();
 
     // 4. 创建新页面记录
     this.t.createPageRecord(pageName);
 
-    // 5. 重新初始化性能监控
+    // 5. 重新初始化性能监控（复用 CDP Session）
     await this.t.performanceMonitor.start();
     await this.t.performanceMonitor.injectWebVitals();
 
-    // 6. 等待页面稳定
+    // 6. 短暂等待让性能数据稳定（不影响采集）
     if (waitTime > 0) {
       await this.page.waitForTimeout(waitTime);
     }
 
-    // 7. 等待更多时间让性能数据收集
-    await this.page.waitForTimeout(500);
+    // 7. 标记采集起点
+    await this.t.performanceMonitor.markCollectStart();
 
-    // 8. 采集初始性能数据
-    await this.collectInitialPerformance(pageName);
-
-    // 9. 截图
+    // 8. 截图
     if (takeScreenshot) {
       await this.takePageScreenshot(pageName, 'loaded');
     }
 
     console.log(`      ✓ 已进入: ${pageName}`);
   }
+
 
   async waitForPageReady(options) {
     const { waitForSelector, waitForUrl, waitForResponse } = options;
@@ -84,8 +137,8 @@ export class PageManager {
     }
 
     try {
-      await this.page.waitForLoadState('networkidle', { timeout: 10000 });
-    } catch (e) {}
+      await this.page.waitForLoadState('domcontentloaded', { timeout: 3000 });
+    } catch (e) { }
   }
 
   async finishCurrentPage(takeScreenshot = true) {
@@ -98,14 +151,11 @@ export class PageManager {
     this.t.currentPageRecord.url = this.page.url();
 
     try {
-      // 等待一下让数据稳定
-      await this.page.waitForTimeout(300);
-      
       const perfData = await this.t.performanceMonitor.collect();
       perfData.url = this.t.currentPageRecord.url;
       perfData.device = this.t.currentDevice?.name || 'Desktop';
       perfData.pageName = pageName;
-      
+
       this.t.currentPageRecord.performanceData = perfData;
       this.t.performanceData.push(perfData);
 
@@ -124,9 +174,9 @@ export class PageManager {
       console.warn(`      ⚠️ 采集性能失败: ${e.message}`);
     }
 
-    if (takeScreenshot) {
-      await this.takePageScreenshot(pageName, 'final');
-    }
+    // if (takeScreenshot) {
+    //   //await this.takePageScreenshot(pageName, 'final');
+    // }
 
     if (!this.t.pageRecords.includes(this.t.currentPageRecord)) {
       this.t.pageRecords.push(this.t.currentPageRecord);
@@ -166,7 +216,7 @@ export class PageManager {
       const safeName = pageName.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-\u4e00-\u9fa5]/g, '');
       const screenshotName = `page-${this.t.pageIndex}-${safeName}-${stage}`;
       const screenshot = await this.t.captureScreenshot(screenshotName);
-      
+
       if (this.t.currentPageRecord) {
         this.t.currentPageRecord.screenshots.push({
           name: `${pageName} - ${stage === 'loaded' ? '页面加载' : '最终状态'}`,

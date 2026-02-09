@@ -52,12 +52,12 @@ export class HTMLReporter {
   generateHTML(results) {
     const { total, passed, failed, duration, suites, apiErrors } = results;
     const passRate = total > 0 ? ((passed / total) * 100).toFixed(1) : 0;
-    
+
     const allPageRecords = [];
     for (const suite of suites) {
       if (suite.pageRecords) allPageRecords.push(...suite.pageRecords);
     }
-    
+
     return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -284,7 +284,7 @@ export class HTMLReporter {
     const apiRequests = page.apiRequests || [];
     const apiErrors = page.apiErrors || [];
     const screenshots = page.screenshots || [];
-    
+
     return `
       <div id="page-${index}" class="page-section ${index === 0 ? 'active' : ''}">
         <div class="page-header">
@@ -305,30 +305,38 @@ export class HTMLReporter {
         </div>
         
         <div class="tab-panel active" data-tab="perf">
-          ${this.generateMetricsSection('🎯 核心 Web Vitals', '用户体验关键指标', [
-            { key: 'LCP', value: wv.lcp, unit: 'ms', thresholds: { warning: 2500, critical: 4000 } },
-            { key: 'FCP', value: wv.fcp, unit: 'ms', thresholds: { warning: 1800, critical: 3000 } },
-            { key: 'CLS', value: wv.cls, unit: '', thresholds: { warning: 0.1, critical: 0.25 } },
-            { key: 'FID', value: wv.fid, unit: 'ms', thresholds: { warning: 100, critical: 300 } },
-            { key: 'INP', value: wv.inp, unit: 'ms', thresholds: { warning: 200, critical: 500 } },
-            { key: 'TTFB', value: wv.ttfb, unit: 'ms', thresholds: { warning: 800, critical: 1800 } }
-          ])}
+          ${perf.isSPA ? this.generateMetricsSection('🎯 核心 Web Vitals', 'SPA页面指标', [
+      { key: 'INP', value: wv.inp, unit: 'ms', thresholds: { warning: 200, critical: 500 } },
+      { key: 'CLS', value: wv.cls, unit: '', thresholds: { warning: 0.1, critical: 0.25 } },
+      { key: 'TBT', value: perf.longTaskStats?.totalBlockingTime, unit: 'ms', thresholds: { warning: 200, critical: 600 } },
+      { key: '长任务数', value: perf.longTaskStats?.count, unit: '', thresholds: { warning: 3, critical: 10 } },
+      { key: '最长阻塞', value: perf.longTaskStats?.maxDuration, unit: 'ms', thresholds: { warning: 100, critical: 200 } },
+      { key: '严重卡顿', value: perf.longTaskStats?.severeCount, unit: '次', thresholds: { warning: 1, critical: 3 } }
+    ]) : this.generateMetricsSection('🎯 核心 Web Vitals', '用户体验关键指标', [
+      { key: 'LCP', value: wv.lcp, unit: 'ms', thresholds: { warning: 2500, critical: 4000 } },
+      { key: 'FCP', value: wv.fcp, unit: 'ms', thresholds: { warning: 1800, critical: 3000 } },
+      { key: 'CLS', value: wv.cls, unit: '', thresholds: { warning: 0.1, critical: 0.25 } },
+      { key: 'INP', value: wv.inp, unit: 'ms', thresholds: { warning: 200, critical: 500 } },
+      { key: 'TTFB', value: wv.ttfb, unit: 'ms', thresholds: { warning: 800, critical: 1800 } },
+      { key: 'TBT', value: perf.longTaskStats?.totalBlockingTime, unit: 'ms', thresholds: { warning: 200, critical: 600 } }
+    ])}
+
           ${this.generateMetricsSection('⏱️ 加载时序', '各阶段耗时', [
-            { key: 'First Paint', value: perf.firstPaint || nav.firstPaint, unit: 'ms', thresholds: { warning: 1000, critical: 2000 } },
-            { key: 'DOM Ready', value: nav.domContentLoaded, unit: 'ms', thresholds: { warning: 2000, critical: 4000 } },
-            { key: 'Load', value: nav.loadEventEnd || nav.totalTime, unit: 'ms', thresholds: { warning: 3000, critical: 6000 } },
-            { key: 'DNS', value: nav.dnsTime, unit: 'ms', thresholds: { warning: 50, critical: 100 } },
-            { key: 'TCP', value: nav.tcpTime, unit: 'ms', thresholds: { warning: 100, critical: 200 } },
-            { key: 'Response', value: nav.responseTime || nav.downloadTime, unit: 'ms', thresholds: { warning: 200, critical: 500 } }
-          ])}
+      { key: 'First Paint', value: perf.firstPaint || nav.firstPaint, unit: 'ms', thresholds: { warning: 1000, critical: 2000 } },
+      { key: 'DOM Ready', value: nav.domContentLoaded, unit: 'ms', thresholds: { warning: 2000, critical: 4000 } },
+      { key: 'Load', value: nav.loadEventEnd || nav.totalTime, unit: 'ms', thresholds: { warning: 3000, critical: 6000 } },
+      { key: 'DNS', value: nav.dnsTime, unit: 'ms', thresholds: { warning: 50, critical: 100 } },
+      { key: 'TCP', value: nav.tcpTime, unit: 'ms', thresholds: { warning: 100, critical: 200 } },
+      { key: 'Response', value: nav.responseTime || nav.downloadTime, unit: 'ms', thresholds: { warning: 200, critical: 500 } }
+    ])}
           ${this.generateMetricsSection('💻 资源使用', '占用情况', [
-            { key: 'JS Heap', value: mem.usedJSHeapMB, unit: 'MB', thresholds: { warning: 50, critical: 100 } },
-            { key: 'DOM Nodes', value: dom.nodes, unit: '', thresholds: { warning: 1500, critical: 3000 } },
-            { key: 'Event Listeners', value: dom.jsEventListeners, unit: '', thresholds: { warning: 500, critical: 1000 } },
-            { key: 'CPU', value: cpu.usage, unit: '%', thresholds: { warning: 50, critical: 80 } },
-            { key: 'FPS', value: fps.current, unit: '', thresholds: { warning: 50, critical: 30 }, reverse: true },
-            { key: 'Layout Count', value: perf.render?.layoutCount, unit: '', thresholds: { warning: 50, critical: 100 } }
-          ])}
+      { key: 'JS Heap', value: mem.usedJSHeapMB, unit: 'MB', thresholds: { warning: 50, critical: 100 } },
+      { key: 'DOM Nodes', value: dom.nodes, unit: '', thresholds: { warning: 1500, critical: 3000 } },
+      { key: 'Event Listeners', value: dom.jsEventListeners, unit: '', thresholds: { warning: 500, critical: 1000 } },
+      { key: 'CPU', value: cpu.usage, unit: '%', thresholds: { warning: 50, critical: 80 } },
+      { key: 'FPS', value: fps.current, unit: '', thresholds: { warning: 50, critical: 30 }, reverse: true },
+      { key: 'Layout Count', value: perf.render?.layoutCount, unit: '', thresholds: { warning: 50, critical: 100 } }
+    ])}
           ${page.performanceData ? this.generateDetailedAnalysis(page.performanceData) : ''}
         </div>
         
@@ -358,7 +366,7 @@ export class HTMLReporter {
     const { key, value, unit, thresholds, reverse } = metric;
     const desc = this.metricDescriptions[key] || {};
     let displayValue = 'N/A', colorClass = 'metric-na', statusClass = '', statusText = '';
-    
+
     if (value != null) {
       const numValue = parseFloat(value);
       if (!isNaN(numValue)) {
@@ -376,7 +384,7 @@ export class HTMLReporter {
         } else { colorClass = 'metric-good'; }
       }
     }
-    
+
     return `<div class="metric-card"><div class="metric-header"><div><div class="metric-name">${key}</div><div class="metric-name-cn">${desc.name || ''}</div></div>${statusText ? '<span class="metric-status ' + statusClass + '">' + statusText + '</span>' : ''}</div><div class="metric-value-row"><span class="metric-value ${colorClass}">${displayValue}</span>${value != null ? '<span class="metric-unit">' + unit + '</span>' : ''}</div>${desc.desc ? '<div class="metric-desc">' + desc.desc + '<br><span style="color:#10b981;">良好: ' + desc.good + '</span> | <span style="color:#ef4444;">差: ' + desc.bad + '</span></div>' : ''}</div>`;
   }
 
@@ -392,7 +400,7 @@ export class HTMLReporter {
 
   renderDetailedIssue(issue) {
     let html = '<div class="issue-card"><div class="issue-header"><span class="issue-icon">' + (issue.severity === 'critical' ? '🔴' : '🟡') + '</span><span class="issue-title">' + issue.title + '</span><span class="expand-icon">▼</span></div><div class="issue-body"><p class="issue-desc">' + (issue.description || '') + '</p>';
-    
+
     if (issue.causes && issue.causes.length > 0) {
       html += '<div class="issue-section"><h5>📋 具体原因</h5>';
       issue.causes.forEach(c => {
@@ -409,7 +417,7 @@ export class HTMLReporter {
       });
       html += '</div>';
     }
-    
+
     if (issue.details && issue.details.length > 0) {
       html += '<div class="issue-section"><h5>📊 详细数据</h5>';
       issue.details.forEach(d => {
@@ -426,13 +434,13 @@ export class HTMLReporter {
       });
       html += '</div>';
     }
-    
+
     if (issue.suggestions && issue.suggestions.length > 0) {
       html += '<div class="issue-section suggestions"><h5>💡 优化建议</h5><ul class="suggestion-list">';
       issue.suggestions.forEach(s => { html += '<li>' + s + '</li>'; });
       html += '</ul></div>';
     }
-    
+
     html += '</div></div>';
     return html;
   }
@@ -442,13 +450,13 @@ export class HTMLReporter {
     const hasError = !!req.error;
     const statusClass = hasError || status >= 400 ? 'status-error' : 'status-ok';
     const errorRowId = 'error-row-' + pageIndex + '-' + reqIndex;
-    
+
     let html = '<tr class="' + (hasError ? 'has-error' : '') + '" data-error-row="' + (hasError ? errorRowId : '') + '"><td><span class="status-badge ' + statusClass + '">' + status + '</span></td><td>' + (req.method || '-') + '</td><td class="url-cell" title="' + req.url + '">' + this.shortenUrl(req.url) + '</td><td>' + (req.duration ? Math.round(req.duration) + 'ms' : '-') + '</td><td>' + this.formatSize(req.size) + '</td></tr>';
-    
+
     if (hasError) {
       html += '<tr id="' + errorRowId + '" class="error-row"><td colspan="5" style="padding:0;border:none;"><div class="error-panel"><div class="error-panel-header">⚠️ ' + this.getErrorTypeText(req.error?.type) + '</div><div class="error-field"><div class="error-field-label">错误信息</div><div class="error-field-value">' + (req.error?.message || '未知错误') + '</div></div><div class="error-field"><div class="error-field-label">URL</div><div class="error-field-value" style="font-family:monospace;font-size:11px;">' + req.url + '</div></div>' + (req.responseBody ? '<div class="error-field"><div class="error-field-label">响应</div><pre>' + this.formatJson(req.responseBody) + '</pre></div>' : '') + '</div></td></tr>';
     }
-    
+
     return html;
   }
 

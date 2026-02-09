@@ -165,7 +165,10 @@ export class TestCase {
       apiErrors: [],
       thresholdViolations: [],
       screenshots: [],
-      steps: []
+      steps: [],
+      // 新增的属性
+      screenshotTaken: false,
+      errorScreenshotTaken: false
     };
 
     console.log(`\n      ═══════════════════════════════════════`);
@@ -190,33 +193,50 @@ export class TestCase {
     await this.page.setViewportSize(device.viewport);
   }
 
+  /**
+   * 执行单个测试步骤的方法
+   * @param {string} name - 步骤名称
+   * @param {Function} fn - 要执行的异步函数
+   */
   async step(name, fn) {
-    this.stepCount++;
+    this.stepCount++;  // 步骤计数器加1
+    // 创建步骤对象，包含步骤基本信息
     const step = {
-      number: this.stepCount,
-      name,
-      startTime: new Date(),
-      status: 'running',
-      screenshot: null
+      number: this.stepCount,  // 步骤编号
+      name,  // 步骤名称
+      startTime: new Date(),  // 步骤开始时间
+      status: 'running',  // 步骤状态，初始为'running'
+      screenshot: null  // 步骤截图，初始为null
     };
+    // 在控制台输出步骤信息
     console.log('      📌 Step', this.stepCount + ':', name);
 
     try {
+      // 执行传入的异步函数
       await fn();
+      // 如果执行成功，更新步骤状态为'passed'
       step.status = 'passed';
-      if (this.config.screenshot.onStep) {
-        step.screenshot = await this.captureScreenshot('step-' + this.stepCount);
-      }
+      // 如果配置中开启了步骤截图，则捕获步骤截图
+      // if (this.config.screenshot.onStep) {
+      //   step.screenshot = await this.captureScreenshot('step-' + this.stepCount);
+      // }
     } catch (error) {
+      // 如果执行出错，更新步骤状态为'failed'，记录错误信息
       step.status = 'failed';
       step.error = error.message;
+      // 捕获错误步骤的截图
       step.screenshot = await this.captureScreenshot('step-' + this.stepCount + '-error');
+      // 抛出错误，使测试流程终止
       throw error;
     } finally {
-      step.endTime = new Date();
-      step.duration = step.endTime - step.startTime;
+
+      // 无论成功或失败，都会执行以下代码
+      step.endTime = new Date();  // 记录步骤结束时间
+      step.duration = step.endTime - step.startTime;  // 计算步骤执行耗时
+      // 将当前步骤添加到步骤列表中
       this.currentSteps.push(step);
 
+      // 如果当前有页面记录，将步骤添加到页面记录中
       if (this.currentPageRecord) {
         this.currentPageRecord.steps.push(step);
       }
@@ -247,7 +267,12 @@ export class TestCase {
 
       // 注入性能监控
       await this.performanceMonitor.injectWebVitals();
-      await this.page.waitForTimeout(1000);
+
+      // 等待浏览器记录 LCP（异步的，需要等待）
+      await this.performanceMonitor.waitForLCP(5000);
+
+      // 标记采集起点（排除等待时间）
+      await this.performanceMonitor.markCollectStart();
 
       // 采集性能
       const perfData = await this.performanceMonitor.collect();
@@ -271,16 +296,31 @@ export class TestCase {
       }
 
       // 截图
+      // try {
+      //   const screenshot = await this.captureScreenshot(`page-${this.pageIndex}-loaded`);
+      //   if (this.currentPageRecord) {
+      //     this.currentPageRecord.screenshots.push({
+      //       name: `${pageName} - 页面加载完成`,
+      //       path: screenshot,
+      //       timestamp: new Date().toISOString()
+      //     });
+      //   }
+      // } catch (e) { }
+      // 截图 - 每个页面只截一张加载完成图
       try {
-        const screenshot = await this.captureScreenshot(`page-${this.pageIndex}-loaded`);
-        if (this.currentPageRecord) {
-          this.currentPageRecord.screenshots.push({
-            name: `${pageName} - 页面加载完成`,
-            path: screenshot,
-            timestamp: new Date().toISOString()
-          });
+        if (!this.currentPageRecord.screenshotTaken) {
+          const screenshot = await this.captureScreenshot(`page-${this.pageIndex}-${pageName}`);
+          if (this.currentPageRecord) {
+            this.currentPageRecord.screenshots.push({
+              name: `${pageName} - 页面加载完成`,
+              path: screenshot,
+              timestamp: new Date().toISOString()
+            });
+            this.currentPageRecord.screenshotTaken = true;
+          }
         }
       } catch (e) { }
+
     });
   }
 
@@ -306,7 +346,6 @@ export class TestCase {
   }
 
   // ====== 截图 ======
-
   async captureScreenshot(name = 'screenshot') {
     const devicePrefix = this.currentDevice ? this.currentDevice.name.replace(/\s+/g, '-') + '-' : '';
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');

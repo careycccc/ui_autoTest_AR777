@@ -157,12 +157,25 @@ export class TestRunner {
       result.status = 'failed';
       result.error = { message: error.message, stack: error.stack };
       console.log('\n    ❌ 测试失败:', error.message);
+      // if (this.config.screenshot.onError) {
+      //   try {
+      //     const screenshotPath = await testCase.captureScreenshot('error');
+      //     result.screenshots.push({ type: 'error', path: screenshotPath, timestamp: new Date().toISOString() });
+      //   } catch (e) { }
+      // }
       if (this.config.screenshot.onError) {
         try {
-          const screenshotPath = await testCase.captureScreenshot('error');
-          result.screenshots.push({ type: 'error', path: screenshotPath, timestamp: new Date().toISOString() });
+          // 只在还没截过错误图时截图
+          if (!testCase.currentPageRecord?.errorScreenshotTaken) {
+            const screenshotPath = await testCase.captureScreenshot('error');
+            result.screenshots.push({ type: 'error', path: screenshotPath, timestamp: new Date().toISOString() });
+            if (testCase.currentPageRecord) {
+              testCase.currentPageRecord.errorScreenshotTaken = true;
+            }
+          }
         } catch (e) { }
       }
+
     } finally {
       if (testCase.afterEachFn) {
         try { await testCase.afterEachFn(); } catch (e) { }

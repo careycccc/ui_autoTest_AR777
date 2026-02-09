@@ -247,7 +247,9 @@ export class TestCase {
 
       // 注入性能监控
       await this.performanceMonitor.injectWebVitals();
-      await this.page.waitForTimeout(1000);
+
+      // 标记真正的采集起点（排除导航等待时间）
+      await this.performanceMonitor.markCollectStart();
 
       // 采集性能
       const perfData = await this.performanceMonitor.collect();
@@ -272,17 +274,21 @@ export class TestCase {
 
       // 截图
       try {
-        const screenshot = await this.captureScreenshot(`page-${this.pageIndex}-loaded`);
-        if (this.currentPageRecord) {
-          this.currentPageRecord.screenshots.push({
-            name: `${pageName} - 页面加载完成`,
-            path: screenshot,
-            timestamp: new Date().toISOString()
-          });
+        if (!this.currentPageRecord.screenshotTaken) {
+          const screenshot = await this.captureScreenshot(`page-${this.pageIndex}-${pageName}`);
+          if (this.currentPageRecord) {
+            this.currentPageRecord.screenshots.push({
+              name: `${pageName} - 页面加载完成`,
+              path: screenshot,
+              timestamp: new Date().toISOString()
+            });
+            this.currentPageRecord.screenshotTaken = true;
+          }
         }
       } catch (e) { }
     });
   }
+
 
   // ====== 操作方法 ======
 

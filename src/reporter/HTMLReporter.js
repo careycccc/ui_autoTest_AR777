@@ -27,7 +27,15 @@ export class HTMLReporter {
       'Event Listeners': { name: '事件监听', desc: '监听器数量', good: '<500', bad: '>1000' },
       'CPU': { name: 'CPU', desc: '处理器占用', good: '<50%', bad: '>80%' },
       'FPS': { name: '帧率', desc: '渲染帧率', good: '>50', bad: '<30' },
-      'Layout Count': { name: '布局次数', desc: '重排次数', good: '<50', bad: '>100' }
+      'Layout Count': { name: '布局次数', desc: '重排次数', good: '<50', bad: '>100' },
+      'TBT': { name: '总阻塞时间', desc: '长任务阻塞总时长', good: '<200ms', bad: '>600ms' },
+      '切换耗时': { name: '页面切换', desc: 'SPA路由切换耗时', good: '<2s', bad: '>5s' },
+      '长任务数': { name: '长任务', desc: '超过50ms的任务', good: '<3', bad: '>10' },
+      '最长阻塞': { name: '最长阻塞', desc: '最长的一次阻塞', good: '<100ms', bad: '>200ms' },
+      '严重卡顿': { name: '严重卡顿', desc: '超过100ms的任务', good: '0次', bad: '>3次' },
+      '新资源数': { name: '新资源', desc: '切换后加载的资源', good: '<20', bad: '>50' },
+      '新资源大小': { name: '新资源大小', desc: '新加载资源总大小', good: '<500KB', bad: '>2MB' }
+
     };
   }
 
@@ -52,12 +60,12 @@ export class HTMLReporter {
   generateHTML(results) {
     const { total, passed, failed, duration, suites, apiErrors } = results;
     const passRate = total > 0 ? ((passed / total) * 100).toFixed(1) : 0;
-    
+
     const allPageRecords = [];
     for (const suite of suites) {
       if (suite.pageRecords) allPageRecords.push(...suite.pageRecords);
     }
-    
+
     return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -273,6 +281,55 @@ export class HTMLReporter {
 </html>`;
   }
 
+
+  // 渲染长任务数据
+  renderLongTasks(metrics) {
+    if (!metrics.longTasks) return '';
+
+    const lt = metrics.longTasks;
+    const isJanky = lt.isJanky;
+    const icon = isJanky ? '⚠️' : '✅';
+
+    return `
+    <div class="metric-card">
+      <div class="metric-header">
+        <span class="metric-name">长任务监控</span>
+        <span class="metric-status ${isJanky ? 'warning' : 'good'}">${icon}</span>
+      </div>
+      <div class="metric-value-row">
+        <span class="metric-value ${isJanky ? 'metric-warning' : 'metric-good'}">${lt.count}</span>
+        <span class="metric-unit">个</span>
+      </div>
+      <div class="metric-desc">长任务数量 (超过100ms: ${lt.severeCount}个)</div>
+      <div class="metric-desc">最长阻塞: ${lt.maxDuration.toFixed(1)}ms</div>
+    </div>
+  `;
+  }
+
+  // 渲染 INP 数据
+  renderINP(metrics) {
+    const inp = metrics.inpDetails?.inp || metrics.webVitals?.inp;
+    if (inp === null) return '';
+
+    const grade = metrics.inpDetails?.grade || 'N/A';
+    const icon = grade === 'good' ? '✅' : grade === 'needs-improvement' ? '🟡' : '🔴';
+
+    return `
+    <div class="metric-card">
+      <div class="metric-header">
+        <span class="metric-name">INP</span>
+        <span class="metric-status ${grade === 'good' ? 'good' : grade === 'needs-improvement' ? 'warning' : 'bad'}">${icon}</span>
+      </div>
+      <div class="metric-value-row">
+        <span class="metric-value ${grade === 'good' ? 'metric-good' : grade === 'needs-improvement' ? 'metric-warning' : 'metric-bad'}">${Math.round(inp)}</span>
+        <span class="metric-unit">ms</span>
+      </div>
+      <div class="metric-desc">交互响应延迟</div>
+    </div>
+  `;
+  }
+
+
   generatePageSection(page, index) {
     const perf = page.performanceData || {};
     const wv = perf.webVitals || {};
@@ -284,7 +341,7 @@ export class HTMLReporter {
     const apiRequests = page.apiRequests || [];
     const apiErrors = page.apiErrors || [];
     const screenshots = page.screenshots || [];
-    
+
     return `
       <div id="page-${index}" class="page-section ${index === 0 ? 'active' : ''}">
         <div class="page-header">
@@ -305,30 +362,43 @@ export class HTMLReporter {
         </div>
         
         <div class="tab-panel active" data-tab="perf">
-          ${this.generateMetricsSection('🎯 核心 Web Vitals', '用户体验关键指标', [
-            { key: 'LCP', value: wv.lcp, unit: 'ms', thresholds: { warning: 2500, critical: 4000 } },
-            { key: 'FCP', value: wv.fcp, unit: 'ms', thresholds: { warning: 1800, critical: 3000 } },
-            { key: 'CLS', value: wv.cls, unit: '', thresholds: { warning: 0.1, critical: 0.25 } },
-            { key: 'FID', value: wv.fid, unit: 'ms', thresholds: { warning: 100, critical: 300 } },
-            { key: 'INP', value: wv.inp, unit: 'ms', thresholds: { warning: 200, critical: 500 } },
-            { key: 'TTFB', value: wv.ttfb, unit: 'ms', thresholds: { warning: 800, critical: 1800 } }
-          ])}
-          ${this.generateMetricsSection('⏱️ 加载时序', '各阶段耗时', [
-            { key: 'First Paint', value: perf.firstPaint || nav.firstPaint, unit: 'ms', thresholds: { warning: 1000, critical: 2000 } },
-            { key: 'DOM Ready', value: nav.domContentLoaded, unit: 'ms', thresholds: { warning: 2000, critical: 4000 } },
-            { key: 'Load', value: nav.loadEventEnd || nav.totalTime, unit: 'ms', thresholds: { warning: 3000, critical: 6000 } },
-            { key: 'DNS', value: nav.dnsTime, unit: 'ms', thresholds: { warning: 50, critical: 100 } },
-            { key: 'TCP', value: nav.tcpTime, unit: 'ms', thresholds: { warning: 100, critical: 200 } },
-            { key: 'Response', value: nav.responseTime || nav.downloadTime, unit: 'ms', thresholds: { warning: 200, critical: 500 } }
-          ])}
+          ${perf.isSPA ? this.generateMetricsSection('🎯 核心 Web Vitals', 'SPA页面指标', [
+      { key: 'CLS', value: wv.cls, unit: '', thresholds: { warning: 0.1, critical: 0.25 } },
+      { key: 'INP', value: wv.inp, unit: 'ms', thresholds: { warning: 200, critical: 500 } },
+      { key: 'TBT', value: perf.longTaskStats?.totalBlockingTime, unit: 'ms', thresholds: { warning: 200, critical: 600 } }
+    ]) : this.generateMetricsSection('🎯 核心 Web Vitals', '用户体验关键指标', [
+      { key: 'LCP', value: wv.lcp, unit: 'ms', thresholds: { warning: 2500, critical: 4000 } },
+      { key: 'FCP', value: wv.fcp, unit: 'ms', thresholds: { warning: 1800, critical: 3000 } },
+      { key: 'CLS', value: wv.cls, unit: '', thresholds: { warning: 0.1, critical: 0.25 } },
+      { key: 'INP', value: wv.inp, unit: 'ms', thresholds: { warning: 200, critical: 500 } },
+      { key: 'TTFB', value: wv.ttfb, unit: 'ms', thresholds: { warning: 800, critical: 1800 } },
+      { key: 'TBT', value: perf.longTaskStats?.totalBlockingTime, unit: 'ms', thresholds: { warning: 200, critical: 600 } }
+    ])}
+
+    ${perf.isSPA ? this.generateMetricsSection('⏱️ SPA 页面切换', '路由切换性能', [
+      { key: '切换耗时', value: perf.spaMetrics?.pageLoadTime, unit: 'ms', thresholds: { warning: 2000, critical: 5000 } },
+      { key: '长任务数', value: perf.longTaskStats?.count, unit: '', thresholds: { warning: 3, critical: 10 } },
+      { key: '最长阻塞', value: perf.longTaskStats?.maxDuration, unit: 'ms', thresholds: { warning: 100, critical: 200 } },
+      { key: '严重卡顿', value: perf.longTaskStats?.severeCount, unit: '次', thresholds: { warning: 1, critical: 3 } },
+      { key: '新资源数', value: perf.spaMetrics?.newResourcesCount, unit: '', thresholds: { warning: 20, critical: 50 } },
+      { key: '新资源大小', value: perf.spaMetrics?.newResourcesTotalSize ? Math.round(perf.spaMetrics.newResourcesTotalSize / 1024) : null, unit: 'KB', thresholds: { warning: 500, critical: 2000 } }
+    ]) : this.generateMetricsSection('⏱️ 加载时序', '各阶段耗时', [
+      { key: 'First Paint', value: perf.firstPaint || nav.firstPaint, unit: 'ms', thresholds: { warning: 1000, critical: 2000 } },
+      { key: 'DOM Ready', value: nav.domContentLoaded, unit: 'ms', thresholds: { warning: 2000, critical: 4000 } },
+      { key: 'Load', value: nav.loadEventEnd || nav.totalTime, unit: 'ms', thresholds: { warning: 3000, critical: 6000 } },
+      { key: 'DNS', value: nav.dnsTime, unit: 'ms', thresholds: { warning: 50, critical: 100 } },
+      { key: 'TCP', value: nav.tcpTime, unit: 'ms', thresholds: { warning: 100, critical: 200 } },
+      { key: 'Response', value: nav.responseTime || nav.downloadTime, unit: 'ms', thresholds: { warning: 200, critical: 500 } }
+    ])}
+
           ${this.generateMetricsSection('💻 资源使用', '占用情况', [
-            { key: 'JS Heap', value: mem.usedJSHeapMB, unit: 'MB', thresholds: { warning: 50, critical: 100 } },
-            { key: 'DOM Nodes', value: dom.nodes, unit: '', thresholds: { warning: 1500, critical: 3000 } },
-            { key: 'Event Listeners', value: dom.jsEventListeners, unit: '', thresholds: { warning: 500, critical: 1000 } },
-            { key: 'CPU', value: cpu.usage, unit: '%', thresholds: { warning: 50, critical: 80 } },
-            { key: 'FPS', value: fps.current, unit: '', thresholds: { warning: 50, critical: 30 }, reverse: true },
-            { key: 'Layout Count', value: perf.render?.layoutCount, unit: '', thresholds: { warning: 50, critical: 100 } }
-          ])}
+      { key: 'JS Heap', value: mem.usedJSHeapMB, unit: 'MB', thresholds: { warning: 50, critical: 100 } },
+      { key: 'DOM Nodes', value: dom.nodes, unit: '', thresholds: { warning: 1500, critical: 3000 } },
+      { key: 'Event Listeners', value: dom.jsEventListeners, unit: '', thresholds: { warning: 500, critical: 1000 } },
+      { key: 'CPU', value: cpu.usage, unit: '%', thresholds: { warning: 50, critical: 80 } },
+      { key: 'FPS', value: fps.current, unit: '', thresholds: { warning: 50, critical: 30 }, reverse: true },
+      { key: 'Layout Count', value: perf.render?.layoutCount, unit: '', thresholds: { warning: 50, critical: 100 } }
+    ])}
           ${page.performanceData ? this.generateDetailedAnalysis(page.performanceData) : ''}
         </div>
         
@@ -358,7 +428,7 @@ export class HTMLReporter {
     const { key, value, unit, thresholds, reverse } = metric;
     const desc = this.metricDescriptions[key] || {};
     let displayValue = 'N/A', colorClass = 'metric-na', statusClass = '', statusText = '';
-    
+
     if (value != null) {
       const numValue = parseFloat(value);
       if (!isNaN(numValue)) {
@@ -376,9 +446,11 @@ export class HTMLReporter {
         } else { colorClass = 'metric-good'; }
       }
     }
-    
+
     return `<div class="metric-card"><div class="metric-header"><div><div class="metric-name">${key}</div><div class="metric-name-cn">${desc.name || ''}</div></div>${statusText ? '<span class="metric-status ' + statusClass + '">' + statusText + '</span>' : ''}</div><div class="metric-value-row"><span class="metric-value ${colorClass}">${displayValue}</span>${value != null ? '<span class="metric-unit">' + unit + '</span>' : ''}</div>${desc.desc ? '<div class="metric-desc">' + desc.desc + '<br><span style="color:#10b981;">良好: ' + desc.good + '</span> | <span style="color:#ef4444;">差: ' + desc.bad + '</span></div>' : ''}</div>`;
   }
+
+
 
   generateDetailedAnalysis(perfData) {
     const analysis = this.analyzer.analyze(perfData);
@@ -392,7 +464,7 @@ export class HTMLReporter {
 
   renderDetailedIssue(issue) {
     let html = '<div class="issue-card"><div class="issue-header"><span class="issue-icon">' + (issue.severity === 'critical' ? '🔴' : '🟡') + '</span><span class="issue-title">' + issue.title + '</span><span class="expand-icon">▼</span></div><div class="issue-body"><p class="issue-desc">' + (issue.description || '') + '</p>';
-    
+
     if (issue.causes && issue.causes.length > 0) {
       html += '<div class="issue-section"><h5>📋 具体原因</h5>';
       issue.causes.forEach(c => {
@@ -409,7 +481,7 @@ export class HTMLReporter {
       });
       html += '</div>';
     }
-    
+
     if (issue.details && issue.details.length > 0) {
       html += '<div class="issue-section"><h5>📊 详细数据</h5>';
       issue.details.forEach(d => {
@@ -426,13 +498,13 @@ export class HTMLReporter {
       });
       html += '</div>';
     }
-    
+
     if (issue.suggestions && issue.suggestions.length > 0) {
       html += '<div class="issue-section suggestions"><h5>💡 优化建议</h5><ul class="suggestion-list">';
       issue.suggestions.forEach(s => { html += '<li>' + s + '</li>'; });
       html += '</ul></div>';
     }
-    
+
     html += '</div></div>';
     return html;
   }
@@ -442,13 +514,13 @@ export class HTMLReporter {
     const hasError = !!req.error;
     const statusClass = hasError || status >= 400 ? 'status-error' : 'status-ok';
     const errorRowId = 'error-row-' + pageIndex + '-' + reqIndex;
-    
+
     let html = '<tr class="' + (hasError ? 'has-error' : '') + '" data-error-row="' + (hasError ? errorRowId : '') + '"><td><span class="status-badge ' + statusClass + '">' + status + '</span></td><td>' + (req.method || '-') + '</td><td class="url-cell" title="' + req.url + '">' + this.shortenUrl(req.url) + '</td><td>' + (req.duration ? Math.round(req.duration) + 'ms' : '-') + '</td><td>' + this.formatSize(req.size) + '</td></tr>';
-    
+
     if (hasError) {
       html += '<tr id="' + errorRowId + '" class="error-row"><td colspan="5" style="padding:0;border:none;"><div class="error-panel"><div class="error-panel-header">⚠️ ' + this.getErrorTypeText(req.error?.type) + '</div><div class="error-field"><div class="error-field-label">错误信息</div><div class="error-field-value">' + (req.error?.message || '未知错误') + '</div></div><div class="error-field"><div class="error-field-label">URL</div><div class="error-field-value" style="font-family:monospace;font-size:11px;">' + req.url + '</div></div>' + (req.responseBody ? '<div class="error-field"><div class="error-field-label">响应</div><pre>' + this.formatJson(req.responseBody) + '</pre></div>' : '') + '</div></td></tr>';
     }
-    
+
     return html;
   }
 
@@ -456,6 +528,7 @@ export class HTMLReporter {
     const base64 = this.imageToBase64(ss.path);
     return '<div class="screenshot-card"><div class="screenshot-img-wrapper">' + (base64 ? '<img src="' + base64 + '" alt="' + ss.name + '" loading="lazy">' : '<div class="screenshot-placeholder"><div style="font-size:40px;">📷</div><div>图片加载失败</div></div>') + '</div><div class="screenshot-info"><div class="screenshot-name">' + ss.name + '</div><div class="screenshot-time">' + (ss.timestamp ? new Date(ss.timestamp).toLocaleString('zh-CN') : '') + '</div></div></div>';
   }
+
 
   escapeHtml(str) { return str ? String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') : ''; }
   getErrorTypeText(type) { return { server_error: '服务器错误', client_error: '客户端错误', api_error: 'API业务错误', network_error: '网络错误' }[type] || '错误'; }

@@ -58,7 +58,8 @@ export class AuthHelper {
             // 切换到登录页
             await this.t.switchToPage('登录页', {
                 waitForSelector: '[data-testid="login-tab-mobile"]',
-                waitTime: 1000
+                waitTime: 500,
+                collectPreviousPage: true
             });
 
             await this.t.step('验证登录页', async () => {
@@ -141,7 +142,7 @@ export class AuthHelper {
             await this.page.locator('[data-testid="login-send-code-btn"]').click();
         });
 
-        await this.page.waitForTimeout(1500);
+        await this.page.waitForTimeout(1000);
 
         // 获取验证码
         const code = await this.getVerifyCode(areaCode + phone);
@@ -179,8 +180,8 @@ export class AuthHelper {
         // 切换到 页面3: 登录成功页
         // ========================================
         await this.t.switchToPage('登录成功页', {
-            waitTime: 3000,
-            collectPreviousPage: true  // 会先完成登录页的采集
+            waitTime: 2000,
+            collectPreviousPage: true  // 会先完成登录成功页的采集
         });
 
         // 等待会员信息等请求

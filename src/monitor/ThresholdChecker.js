@@ -1,8 +1,16 @@
+/**
+ * ThresholdChecker 类用于检查各种性能指标是否超过预设的阈值
+ */
 export class ThresholdChecker {
+  /**
+   * 创建 ThresholdChecker 实例
+   * @param {Object} thresholds - 预设的阈值配置
+   * @param {Function} screenshotFn - 截图函数，用于在出现严重违规时截图
+   */
   constructor(thresholds, screenshotFn) {
-    this.thresholds = thresholds;
-    this.screenshotFn = screenshotFn;
-    this.violations = [];
+    this.thresholds = thresholds;  // 存储阈值配置
+    this.screenshotFn = screenshotFn;  // 存储截图函数
+    this.violations = [];  // 存储所有违规记录
   }
 
   async check(metrics, context = '') {
@@ -11,7 +19,7 @@ export class ThresholdChecker {
     // ========== Web Vitals 检查 ==========
     if (metrics.webVitals) {
       const wv = metrics.webVitals;
-      
+
       if (wv.lcp !== null && wv.lcp !== undefined) {
         violations.push(...this.checkMetric('LCP', wv.lcp, this.thresholds.lcp, 'ms'));
       }
@@ -82,13 +90,13 @@ export class ThresholdChecker {
         this.violations.push(v);
       }
 
-      // 截图
-      if (this.screenshotFn && violations.some(v => v.level === 'critical')) {
-        try {
-          const screenshotPath = await this.screenshotFn('threshold-violation');
-          violations.forEach(v => v.screenshot = screenshotPath);
-        } catch (e) {}
-      }
+      // 截图 因为错误截图已经在 step 失败时截了
+      // if (this.screenshotFn && violations.some(v => v.level === 'critical')) {
+      //   try {
+      //     const screenshotPath = await this.screenshotFn('threshold-violation');
+      //     violations.forEach(v => v.screenshot = screenshotPath);
+      //   } catch (e) { }
+      // }
     }
 
     return violations;
@@ -96,7 +104,7 @@ export class ThresholdChecker {
 
   checkMetric(name, value, threshold, unit) {
     const violations = [];
-    
+
     if (!threshold) return violations;
 
     if (value >= threshold.critical) {
@@ -124,7 +132,7 @@ export class ThresholdChecker {
 
   checkMetricReverse(name, value, threshold, unit) {
     const violations = [];
-    
+
     if (!threshold) return violations;
 
     if (value <= threshold.critical) {
