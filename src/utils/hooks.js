@@ -18,7 +18,9 @@ export class TestHooks {
 
     /**
      * 标准前置处理
-     * 产生页面：首页 → 登录页 → 登录成功页
+     * 产生页面：首页 → 登录页 → 登录成功页（弹窗已自动清理）
+     *
+     * 完成后：页面处于干净的已登录首页状态 ✅
      */
     async standardSetup(options = {}) {
         const { needLogin = true, networkFilters = null } = options;
@@ -26,6 +28,7 @@ export class TestHooks {
         this.setupNetworkFilter(networkFilters);
 
         if (needLogin) {
+            // login() 内部已包含弹窗处理，无需额外调用
             const success = await this.auth.login();
             if (!success) throw new Error('登录失败');
         }
@@ -34,7 +37,7 @@ export class TestHooks {
     }
 
     /**
-     * 只访问首页
+     * 只访问首页（不登录）
      */
     async gotoHomePageOnly() {
         this.setupNetworkFilter();

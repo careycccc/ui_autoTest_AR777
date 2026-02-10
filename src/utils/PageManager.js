@@ -112,7 +112,7 @@ export class PageManager {
     if (waitForSelector) {
       try {
         console.log(`      ⏳ 等待元素: ${waitForSelector}`);
-        await this.page.waitForSelector(waitForSelector, { timeout: 15000 });
+        await this.page.waitForSelector(waitForSelector, { timeout: 5000 });
       } catch (e) {
         console.warn(`      ⚠️ 等待元素超时: ${waitForSelector}`);
       }

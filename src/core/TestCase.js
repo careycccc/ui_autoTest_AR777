@@ -340,9 +340,17 @@ export class TestCase {
   }
 
   async waitForTimeout(ms) {
-    await this.step('等待 ' + ms + 'ms', async () => {
+    // 简单的等待，不使用 step 包装，避免截图失败问题
+    try {
       await this.page.waitForTimeout(ms);
-    });
+    } catch (e) {
+      // 如果页面已关闭，静默处理
+      if (e.message && e.message.includes('closed')) {
+        console.warn('      ⚠️ 等待时页面已关闭');
+        return;
+      }
+      throw e;
+    }
   }
 
   // ====== 截图 ======

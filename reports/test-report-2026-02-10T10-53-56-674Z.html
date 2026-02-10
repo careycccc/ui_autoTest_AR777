@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UI自动化测试报告</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header { background: white; border-radius: 16px; padding: 30px; margin-bottom: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); }
+    .header h1 { color: #333; font-size: 28px; }
+    .header-meta { color: #666; margin-top: 10px; font-size: 14px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .stat-card { background: white; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+    .stat-value { font-size: 28px; font-weight: 700; }
+    .stat-label { color: #666; margin-top: 8px; font-size: 13px; }
+    .stat-passed .stat-value { color: #10b981; }
+    .stat-failed .stat-value { color: #ef4444; }
+    .stat-rate .stat-value { color: #667eea; }
+    .page-nav { background: white; border-radius: 12px; padding: 16px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 10px; }
+    .page-nav-btn { padding: 10px 20px; border: 2px solid #e5e7eb; background: white; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; color: #374151; transition: all 0.2s; }
+    .page-nav-btn:hover { border-color: #667eea; color: #667eea; }
+    .page-nav-btn.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-color: transparent; color: white; }
+    .error-badge { background: #ef4444; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+    .page-section { display: none; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .page-section.active { display: block; }
+    .page-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 24px; }
+    .page-title { font-size: 20px; font-weight: 600; }
+    .page-url { font-size: 12px; opacity: 0.9; word-break: break-all; font-family: monospace; background: rgba(255,255,255,0.1); padding: 8px; border-radius: 6px; margin-top: 8px; }
+    .page-meta { display: flex; gap: 20px; margin-top: 10px; font-size: 13px; opacity: 0.9; flex-wrap: wrap; }
+    .section-tabs { display: flex; border-bottom: 1px solid #e5e7eb; background: #f9fafb; }
+    .section-tab { padding: 14px 24px; border: none; background: none; cursor: pointer; font-size: 14px; font-weight: 500; color: #6b7280; position: relative; }
+    .section-tab:hover { color: #667eea; }
+    .section-tab.active { color: #667eea; background: white; }
+    .section-tab.active::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: #667eea; }
+    .section-tab .badge { background: #ef4444; color: white; font-size: 11px; padding: 2px 6px; border-radius: 10px; margin-left: 6px; }
+    .tab-panel { display: none; padding: 24px; }
+    .tab-panel.active { display: block; }
+    .metrics-section { margin-bottom: 28px; }
+    .metrics-section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid #f3f4f6; }
+    .metrics-section-title { font-size: 15px; font-weight: 600; color: #374151; }
+    .metrics-section-desc { font-size: 12px; color: #9ca3af; }
+    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+    .metric-card { background: #f9fafb; border-radius: 10px; padding: 14px; border: 1px solid #e5e7eb; }
+    .metric-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+    .metric-name { font-size: 11px; color: #6b7280; font-weight: 500; }
+    .metric-name-cn { font-size: 10px; color: #9ca3af; }
+    .metric-status { font-size: 9px; padding: 2px 5px; border-radius: 6px; font-weight: 500; }
+    .metric-status.good { background: #d1fae5; color: #059669; }
+    .metric-status.warning { background: #fef3c7; color: #d97706; }
+    .metric-status.bad { background: #fee2e2; color: #dc2626; }
+    .metric-value-row { display: flex; align-items: baseline; gap: 3px; margin: 6px 0; }
+    .metric-value { font-size: 22px; font-weight: 700; }
+    .metric-unit { font-size: 11px; color: #9ca3af; }
+    .metric-good { color: #10b981; }
+    .metric-warning { color: #f59e0b; }
+    .metric-bad { color: #ef4444; }
+    .metric-na { color: #9ca3af; }
+    .metric-desc { font-size: 10px; color: #9ca3af; line-height: 1.4; margin-top: 6px; padding-top: 6px; border-top: 1px solid #e5e7eb; }
+    .analysis-good { display: flex; align-items: center; gap: 16px; background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border: 1px solid #6ee7b7; border-radius: 12px; padding: 20px; margin-top: 24px; }
+    .analysis-good-icon { font-size: 28px; }
+    .analysis-good-text strong { color: #059669; font-size: 15px; }
+    .analysis-good-text span { color: #047857; font-size: 13px; display: block; margin-top: 4px; }
+    .analysis-section { background: #f9fafb; border-radius: 12px; padding: 20px; margin-top: 24px; border: 1px solid #e5e7eb; }
+    .analysis-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #e5e7eb; }
+    .analysis-header h3 { font-size: 16px; color: #374151; margin: 0; }
+    .analysis-score { padding: 6px 14px; border-radius: 16px; font-weight: 600; font-size: 13px; }
+    .score-a { background: #d1fae5; color: #059669; }
+    .score-b { background: #fef3c7; color: #d97706; }
+    .score-c { background: #fed7aa; color: #c2410c; }
+    .score-d, .score-f { background: #fee2e2; color: #dc2626; }
+    .issue-group { margin-top: 16px; }
+    .issue-group-title { font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 12px; }
+    .issue-card { background: white; border-radius: 8px; margin-bottom: 10px; border: 1px solid #e5e7eb; overflow: hidden; cursor: pointer; }
+    .issue-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #f9fafb; }
+    .issue-icon { font-size: 14px; }
+    .issue-title { flex: 1; font-weight: 500; color: #374151; font-size: 13px; }
+    .expand-icon { font-size: 11px; color: #9ca3af; transition: transform 0.2s; }
+    .issue-card.expanded .expand-icon { transform: rotate(180deg); }
+    .issue-body { display: none; padding: 16px; border-top: 1px solid #e5e7eb; }
+    .issue-card.expanded .issue-body { display: block; }
+    .issue-desc { color: #6b7280; font-size: 13px; margin-bottom: 12px; line-height: 1.5; }
+    .issue-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid #f3f4f6; }
+    .issue-section h5 { font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 10px; }
+    .cause-item { background: #fef2f2; border-radius: 6px; padding: 12px; margin-bottom: 10px; border-left: 3px solid #f87171; }
+    .cause-reason { font-weight: 500; color: #dc2626; font-size: 12px; margin-bottom: 4px; }
+    .cause-detail { color: #6b7280; font-size: 12px; line-height: 1.4; }
+    .cause-suggestion { color: #059669; font-size: 11px; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #fecaca; }
+    .cause-resources { margin-top: 10px; overflow-x: auto; }
+    .resource-table { width: 100%; font-size: 11px; border-collapse: collapse; }
+    .resource-table th { background: #fee2e2; padding: 6px 10px; text-align: left; font-weight: 600; color: #991b1b; }
+    .resource-table td { padding: 6px 10px; border-bottom: 1px solid #fecaca; color: #374151; }
+    .resource-url { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; font-size: 10px; }
+    .detail-block { background: #f3f4f6; border-radius: 6px; padding: 12px; margin-bottom: 10px; }
+    .detail-label { font-weight: 600; color: #374151; font-size: 12px; margin-bottom: 6px; }
+    .detail-list { margin: 0; padding: 0; list-style: none; }
+    .detail-list li { margin-bottom: 3px; }
+    .detail-list pre { margin: 0; padding: 6px 10px; background: #1f2937; color: #f9fafb; border-radius: 4px; font-size: 10px; line-height: 1.4; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+    .issue-section.suggestions { background: #f0fdf4; border-radius: 6px; padding: 12px; border-top: none; margin-top: 12px; }
+    .issue-section.suggestions h5 { color: #059669; }
+    .suggestion-list { margin: 0; padding-left: 18px; }
+    .suggestion-list li { color: #047857; font-size: 12px; margin-bottom: 4px; line-height: 1.4; }
+    .api-table-wrapper { overflow-x: auto; }
+    .api-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .api-table th { background: #f3f4f6; padding: 10px 14px; text-align: left; font-weight: 600; color: #374151; }
+    .api-table td { padding: 10px 14px; border-bottom: 1px solid #e5e7eb; }
+    .api-table tbody tr { cursor: pointer; transition: background 0.2s; }
+    .api-table tbody tr:hover { background: #f9fafb; }
+    .api-table tbody tr.has-error { background: #fef2f2; }
+    .status-badge { display: inline-block; padding: 3px 10px; border-radius: 16px; font-size: 11px; font-weight: 600; }
+    .status-ok { background: #d1fae5; color: #059669; }
+    .status-error { background: #fee2e2; color: #dc2626; }
+    .url-cell { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; font-size: 11px; }
+    .error-row { display: none; }
+    .error-row.open { display: table-row; }
+    .error-panel { background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 14px; margin: 6px; }
+    .error-panel-header { font-weight: 600; color: #dc2626; margin-bottom: 10px; font-size: 13px; }
+    .error-field { margin-bottom: 10px; }
+    .error-field-label { font-size: 10px; color: #6b7280; text-transform: uppercase; font-weight: 600; margin-bottom: 3px; }
+    .error-field-value { font-size: 12px; color: #374151; word-break: break-all; }
+    .error-panel pre { background: #1f2937; color: #f9fafb; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 11px; margin-top: 6px; }
+    .screenshots-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+    .screenshot-card { border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
+    .screenshot-img-wrapper { position: relative; background: #f3f4f6; min-height: 180px; }
+    .screenshot-card img { width: 100%; height: auto; display: block; }
+    .screenshot-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 180px; color: #9ca3af; }
+    .screenshot-info { padding: 12px; background: #f9fafb; }
+    .screenshot-name { font-weight: 600; color: #374151; font-size: 13px; }
+    .screenshot-time { font-size: 11px; color: #6b7280; margin-top: 2px; }
+    .empty-state { text-align: center; padding: 50px; color: #9ca3af; }
+    .empty-state-icon { font-size: 40px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🧪 UI 自动化测试报告</h1>
+      <div class="header-meta">📅 2026/2/10 16:23:56 | ⏱️ 2.81s | 📄 0 个页面</div>
+    </div>
+    
+    <div class="stats">
+      <div class="stat-card"><div class="stat-value">0</div><div class="stat-label">总测试数</div></div>
+      <div class="stat-card stat-passed"><div class="stat-value">0</div><div class="stat-label">✅ 通过</div></div>
+      <div class="stat-card stat-failed"><div class="stat-value">0</div><div class="stat-label">❌ 失败</div></div>
+      <div class="stat-card stat-rate"><div class="stat-value">0%</div><div class="stat-label">通过率</div></div>
+      <div class="stat-card"><div class="stat-value">0</div><div class="stat-label">📄 页面</div></div>
+      <div class="stat-card stat-failed"><div class="stat-value">0</div><div class="stat-label">🔴 API错误</div></div>
+    </div>
+    
+    <div class="page-nav">
+      <span style="color: #6b7280; font-weight: 500; padding: 10px;">📑 页面:</span>
+      
+    </div>
+    
+    
+  </div>
+  
+  <script>
+    // 页面切换
+    document.querySelectorAll('.page-nav-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var index = parseInt(this.getAttribute('data-index'));
+        if (isNaN(index)) return;
+        
+        document.querySelectorAll('.page-nav-btn').forEach(function(b) {
+          b.classList.remove('active');
+        });
+        this.classList.add('active');
+        
+        document.querySelectorAll('.page-section').forEach(function(s, i) {
+          s.classList.toggle('active', i === index);
+        });
+      });
+    });
+    
+    // Tab 切换
+    document.querySelectorAll('.section-tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        var tabName = this.getAttribute('data-tab');
+        var section = this.closest('.page-section');
+        
+        section.querySelectorAll('.section-tab').forEach(function(t) {
+          t.classList.toggle('active', t.getAttribute('data-tab') === tabName);
+        });
+        section.querySelectorAll('.tab-panel').forEach(function(p) {
+          p.classList.toggle('active', p.getAttribute('data-tab') === tabName);
+        });
+      });
+    });
+    
+    // 展开/折叠问题卡片
+    document.querySelectorAll('.issue-card').forEach(function(card) {
+      card.addEventListener('click', function() {
+        this.classList.toggle('expanded');
+      });
+    });
+    
+    // 展开/折叠错误详情
+    document.querySelectorAll('.api-table tbody tr:not(.error-row)').forEach(function(row) {
+      row.addEventListener('click', function() {
+        var errorRowId = this.getAttribute('data-error-row');
+        if (errorRowId) {
+          var errorRow = document.getElementById(errorRowId);
+          if (errorRow) {
+            errorRow.classList.toggle('open');
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>

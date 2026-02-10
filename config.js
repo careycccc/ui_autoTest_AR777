@@ -1,4 +1,9 @@
 export default {
+  // 调试模式（设为 true 时测试完成后不关闭浏览器）
+  debug: true,
+  // 调试时暂停时间（毫秒，设为 0 则无限等待）
+  debugPauseTime: 0,
+
   // 浏览器配置
   browser: {
     headless: false,

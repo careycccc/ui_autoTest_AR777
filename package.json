@@ -4,7 +4,7 @@
   "description": "UI自动化测试平台 - 性能监控、网络采集、错误截图、精美报告",
   "type": "module",
   "scripts": {
-    "test": "node src/index.js"
+    "test": "node src/index.js --ui"
   },
   "dependencies": {
     "@playwright/test": "^1.58.1",

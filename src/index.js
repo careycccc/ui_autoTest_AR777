@@ -11,8 +11,9 @@ const rootDir = path.resolve(__dirname, '..');
 // 配置要运行的测试文件
 // ============================================================
 const testFiles = [
-  'tests/arr777.test.js',
+  // 'tests/runRandomMaster.test.js',
   // 'tests/example.test.js',
+  'tests/runAll.test.js',
 ];
 
 // ============================================================
@@ -63,3 +64,4 @@ runner.run(absoluteTestFiles, { devices: testDevices }).then(results => {
   console.error('❌ 测试运行失败:', err);
   process.exit(1);
 });
+

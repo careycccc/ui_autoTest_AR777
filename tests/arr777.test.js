@@ -1,113 +1,58 @@
 // tests/withBeforeEach.test.js
 import { TestHooks } from '../src/utils/hooks.js';
-import { checkpopu } from '../src/utils/checkpopu.js';
 
 export default async function (test) {
+    let hooks;
+    let auth;
 
-  let hooks;
+    // 每个测试前登录 + 自动清理弹窗
+    test.beforeEach(async () => {
+        hooks = new TestHooks(test);
+        auth = await hooks.standardSetup();  // 🔥 只调用一次！内部已包含弹窗处理
+        // ✅ 到这里：已登录 + 无弹窗 的干净首页
+    });
 
-  // 每个测试前登录
-  test.beforeEach(async () => {
-    hooks = new TestHooks(test);
-    await hooks.standardSetup();  // 就这一行！
-  });
-  // View My Bonus
-  test.test('判断登录成功后有没有幸运礼包弹窗', async () => {
-    try {
-      const result = await test.page.getByText('View My Bonus')
-      if (result) {
-        await test.page.click('text=View My Bonus')
-        // 等待1s后
-        await test.page.waitForTimeout(2000)
-        // 点击弹窗中的关闭按钮
-        const claimButton = test.page.getByText('Claim', { exact: true });
-        if (await claimButton.isVisible()) {
-          await claimButton.click();
-          // 等待2s后,此时进入了幸运礼包的界面
-          await test.page.waitForTimeout(2000)
-          // 点击页面左上角，确保焦点返回到页面
-          await test.page.mouse.click(30, 30);
-          checkpopu(test)
-          //await test.page.waitForTimeout(5000)
-        } else {
-          console.log('未发现幸运礼包弹窗的确定按钮，无法进行点击操作测试');
-        }
-      } else {
-        console.log('未发现幸运礼包弹窗，继续执行判断首页有没有其他的弹窗测试');
-        checkpopu(test)
-      }
-    } catch (e) {
-      console.log('处理首页幸运礼包弹窗时出错:', e);
-    }
-  }
-  )
-  // test.test('判断登录成功后有没有弹窗', async () => {
-  //   try {
-  //     // 设置最大尝试次数，防止无限循环
-  //     const maxAttempts = 5;
-  //     let attempts = 0;
-  //     let popupExists = true;
+    test.test('登录后导航测试', async () => {
 
-  //     // 循环检查并处理弹窗，直到弹窗不存在或达到最大尝试次数
-  //     while (popupExists && attempts < maxAttempts) {
-  //       attempts++;
-  //       console.log(`第${attempts}次检查弹窗...`);
+        // 进入活动资讯
+        await test.page.waitForTimeout(1000);
+        await test.page.locator('#activity').click();
+        await test.switchToPage('活动资讯页', {
+            waitForSelector: 'text=Promotions',
+            waitTime: 1000,
+            collectPreviousPage: true
+        });
 
-  //       // 检查弹窗是否存在
-  //       popupExists = await test.page.locator('#popup-mask').isVisible().catch(() => false);
+        // 进入新版返佣
+        await test.page.waitForTimeout(1000);
+        await test.page.locator('#promotion').click();
+        await test.switchToPage('新版返佣', {
+            waitForSelector: 'text=My Rewards',
+            waitTime: 1000,
+            collectPreviousPage: true
+        });
 
-  //       if (popupExists) {
-  //         console.log('发现弹窗，正在关闭...');
-  //         // 点击弹窗关闭按钮
-  //         await test.page.click('#popup-mask');
+        // 进入菜单
+        await test.page.waitForTimeout(1000);
+        await test.page.locator('#app #menu').click();
+        await test.switchToPage('菜单', {
+            waitForSelector: '.uid',
+            waitTime: 1000,
+            collectPreviousPage: true
+        });
+        await auth.clickCorner('bottom-right', 5);
 
-  //         // 等待一小段时间，让弹窗关闭动画完成
-  //         await test.waitForTimeout(500);
+        // 进入邀请转盘
+        await test.page.waitForTimeout(1000);
+        await test.page.locator('#turntable').click();
+        await test.switchToPage('邀请转盘', {
+            waitForSelector: 'text=Cash everyday',  // 🔥 修复：用文本选择器
+            waitTime: 1000,
+            collectPreviousPage: true
+        });
+        // 进行左上角返回的问题
+        await auth.dismissOverlay();
 
-  //         // 点击页面左上角，确保焦点返回到页面
-  //         await test.page.mouse.click(30, 30);
-
-  //         // 再次等待，确保弹窗已完全关闭
-  //         await test.waitForTimeout(1000);
-  //       } else {
-  //         console.log('未发现弹窗，继续执行测试');
-  //       }
-  //     }
-
-  //     if (attempts >= maxAttempts) {
-  //       console.warn(`已达到最大尝试次数(${maxAttempts})，停止检查弹窗`);
-  //     }
-  //   } catch (e) {
-  //     console.log('处理首页弹窗时出错:', e);
-  //   }
-  // })
-
-
-  // test.test('测试1: 查看余额', async () => {
-  //   // 已登录状态，继续操作
-  //   await test.clickAndSwitchTo('钱包页',
-  //     async () => {
-  //       await test.page.click('.wallet-btn');
-  //     },
-  //     { waitForSelector: '.balance', waitTime: 1500 }
-  //   );
-
-  //   await test.step('验证余额显示', async () => {
-  //     await test.assert.visible('.balance');
-  //   });
-  // });
-
-  // test.test('测试2: 查看消息', async () => {
-  //   // 每个测试都会重新登录
-  //   await test.clickAndSwitchTo('消息中心',
-  //     async () => {
-  //       await test.page.click('.message-btn');
-  //     },
-  //     { waitForSelector: '.message-list', waitTime: 1500 }
-  //   );
-
-  //   await test.step('验证消息列表', async () => {
-  //     await test.assert.visible('.message-list');
-  //   });
-  // });
+        await test.page.pause();
+    });
 }

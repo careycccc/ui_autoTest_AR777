@@ -121,8 +121,25 @@ export class TestRunner {
       this.results.apiErrors.push(...suite.apiErrors);
       this.results.allNetworkRequests.push(...suite.networkRequests);
       this.results.suites.push(suite);
+      // 这个浏览器会关闭
+      // await context.close();
+      // 浏览器会一直打开
+      // 调试模式下保持浏览器打开
+      if (this.browser && !this.config.debug) {
+        await this.browser.close();
+      } else if (this.config.debug && this.browser) {
+        console.log('\n🔧 调试模式：浏览器保持打开');
+        if (this.config.debugPauseTime > 0) {
+          console.log(`⏳ 暂停 ${this.config.debugPauseTime}ms 后关闭...`);
+          await new Promise(resolve => setTimeout(resolve, this.config.debugPauseTime));
+          await this.browser.close();
+        } else {
+          console.log('按 Ctrl+C 手动关闭浏览器');
+          // 无限等待
+          await new Promise(() => { });
+        }
+      }
 
-      await context.close();
     } catch (error) {
       console.error('❌ 错误:', error.message);
     }
@@ -157,12 +174,6 @@ export class TestRunner {
       result.status = 'failed';
       result.error = { message: error.message, stack: error.stack };
       console.log('\n    ❌ 测试失败:', error.message);
-      // if (this.config.screenshot.onError) {
-      //   try {
-      //     const screenshotPath = await testCase.captureScreenshot('error');
-      //     result.screenshots.push({ type: 'error', path: screenshotPath, timestamp: new Date().toISOString() });
-      //   } catch (e) { }
-      // }
       if (this.config.screenshot.onError) {
         try {
           // 只在还没截过错误图时截图
