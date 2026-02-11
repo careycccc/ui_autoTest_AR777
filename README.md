@@ -400,6 +400,58 @@ runner.registerCase('新版返佣', '检查团队详情', async (page, auth, tes
 });
 ```
 
+### 模块化子用例管理
+
+项目采用模块化结构管理子用例，每个大类的子用例都在独立的文件中。
+
+#### 基本用法
+
+```javascript
+import { registerAllCases } from '../scenarios/index.js';
+
+// 注册所有子用例
+registerAllCases(runner);
+
+// 只注册特定大类
+registerAllCases(runner, { only: ['活动资讯', '新版返佣'] });
+
+// 排除特定大类
+registerAllCases(runner, { exclude: ['菜单'] });
+```
+
+#### 添加新的子用例
+
+1. 在对应大类的 `*-cases.js` 文件中添加：
+
+```javascript
+// scenarios/earn/earn-cases.js
+export function registerEarnCases(runner) {
+    runner.registerCase('新版返佣', '新的测试用例', async (page, auth, test) => {
+        // 测试逻辑
+    });
+}
+```
+
+2. 如果需要复杂的业务逻辑，在 `*.js` 文件中创建函数：
+
+```javascript
+// scenarios/earn/earn.js
+export async function newFeature(page, test) {
+    // 复杂的业务逻辑
+}
+
+// scenarios/earn/earn-cases.js
+import { newFeature } from './earn.js';
+
+export function registerEarnCases(runner) {
+    runner.registerCase('新版返佣', '新功能测试', async (page, auth, test) => {
+        await newFeature(page, test);
+    });
+}
+```
+
+详细指南请参考 [scenarios/EXAMPLE_CASES.md](./scenarios/EXAMPLE_CASES.md)。
+
 ### 断言
 
 ```javascript
@@ -411,6 +463,38 @@ await t.assert.toHaveText('#element', 'Expected Text');
 
 // URL 检查
 await t.assert.toHaveURL(/dashboard/);
+```
+
+### Telegram 跳转和返回
+
+封装了 Telegram 跳转和返回的通用函数，自动处理跳转、验证和返回逻辑。
+
+```javascript
+import { handleTelegramJump } from './scenarios/utils.js';
+
+// 基本用法
+const result = await handleTelegramJump(page, '.share-icons', {
+  telegramText: 'Telegram',  // Telegram 文本标识
+  jumpTimeout: 5000,         // 跳转超时时间
+  waitAfterBack: 1000,       // 返回后等待时间
+  verifyReturn: true         // 验证是否返回原页面
+});
+
+// 检查结果
+if (result.success) {
+  console.log('✅ Telegram 跳转和返回成功');
+} else {
+  console.log(`❌ 失败: ${result.error}`);
+}
+
+// 结果对象包含：
+// - success: 是否成功
+// - jumped: 是否成功跳转
+// - returned: 是否成功返回
+// - originalUrl: 原始页面 URL
+// - jumpUrl: 跳转后的 URL
+// - returnUrl: 返回后的 URL
+// - error: 错误信息
 ```
 
 ### 性能数据采集
@@ -450,17 +534,47 @@ const pageRecords = t.getPageRecords();
 │       ├── ApiAnalyzer.js       # API 分析器
 │       ├── PerformanceAnalyzer.js   # 性能分析器
 │       └── helpers.js           # 辅助函数
+├── scenarios/                   # 测试场景（模块化）
+│   ├── index.js                 # 统一注册入口
+│   ├── utils.js                 # 场景工具函数
+│   ├── EXAMPLE_CASES.md         # 添加子用例指南
+│   ├── promo/                   # 活动资讯
+│   │   ├── promo.js             # 业务逻辑
+│   │   └── promo-cases.js       # 子用例注册
+│   ├── earn/                    # 新版返佣
+│   │   ├── earn.js              # 业务逻辑
+│   │   └── earn-cases.js        # 子用例注册
+│   ├── menu/                    # 菜单
+│   │   └── menu-cases.js        # 子用例注册
+│   ├── turntable/               # 邀请转盘
+│   │   └── turntable-cases.js   # 子用例注册
+│   └── home/                    # 首页
+│       └── home-cases.js        # 子用例注册
 ├── tests/                       # 测试用例
-│   ├── example.test.js
-│   └── runAll.test.js
-├── scenarios/                   # 测试场景
-│   ├── earn/                    # 返佣场景
-│   └── promo/                   # 活动场景
+│   ├── runAll.test.js           # 完整测试套件
+│   ├── example.test.js          # 示例测试
+│   └── telegram-jump-demo.test.js  # Telegram 跳转演示
 └── reports/                     # 测试报告
     ├── screenshots/             # 截图
     ├── console-errors/          # 控制台错误截图
     └── test-report-xxx.html     # HTML 报告
 ```
+
+### 模块化子用例结构
+
+项目采用模块化结构管理子用例，每个大类的子用例都在独立的文件中：
+
+- **业务逻辑文件** (`*.js`): 包含具体的测试逻辑函数
+- **子用例注册文件** (`*-cases.js`): 注册该大类的所有子用例
+- **统一入口** (`scenarios/index.js`): 提供统一的注册接口
+
+**优势：**
+- ✅ 代码组织清晰，易于维护
+- ✅ 每个大类独立管理，互不干扰
+- ✅ 支持选择性注册和执行
+- ✅ 便于团队协作开发
+
+详见 [scenarios/EXAMPLE_CASES.md](./scenarios/EXAMPLE_CASES.md) 了解如何添加新的子用例。
 
 ---
 
@@ -528,6 +642,68 @@ t.getThresholdViolations()
 await t.assert.toBeVisible(selector)
 await t.assert.toHaveText(selector, text)
 await t.assert.toHaveURL(pattern)
+```
+
+### 工具函数
+
+#### handleTelegramJump
+
+Telegram 跳转和返回的通用函数。
+
+```javascript
+import { handleTelegramJump } from './scenarios/utils.js';
+
+const result = await handleTelegramJump(page, parentSelector, options);
+```
+
+**参数：**
+- `page` (Page): Playwright 页面对象
+- `parentSelector` (string): 父容器选择器，如 `.share-icons`
+- `options` (Object): 可选配置
+  - `telegramText` (string): Telegram 文本标识，默认 `'Telegram'`
+  - `jumpTimeout` (number): 跳转等待超时时间（毫秒），默认 `5000`
+  - `waitAfterBack` (number): 返回后等待时间（毫秒），默认 `1000`
+  - `verifyReturn` (boolean): 是否验证返回到原页面，默认 `true`
+
+**返回值：**
+```javascript
+{
+  success: boolean,      // 是否成功
+  jumped: boolean,       // 是否成功跳转
+  returned: boolean,     // 是否成功返回
+  originalUrl: string,   // 原始页面 URL
+  jumpUrl: string,       // 跳转后的 URL
+  returnUrl: string,     // 返回后的 URL
+  error: string          // 错误信息
+}
+```
+
+#### clickIfTextExists
+
+当文本存在时点击元素。
+
+```javascript
+import { clickIfTextExists } from './scenarios/utils.js';
+
+const clicked = await clickIfTextExists(page, 'Button Text', {
+  timeout: 3000,
+  exact: false,
+  name: '按钮',
+  waitAfter: 1000
+});
+```
+
+#### PageRegion
+
+区域定位器类，先定位区域再操作子元素。
+
+```javascript
+import { PageRegion } from './scenarios/utils.js';
+
+const region = new PageRegion(page);
+await region.enterRegion('.container', { hasText: 'Title' });
+await region.click('.button');
+const text = await region.getText('.label');
 ```
 
 ### ConsoleErrorMonitor

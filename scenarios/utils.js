@@ -55,6 +55,137 @@ export async function clickIfTextExists(page, text, options = {}) {
 
 
 /**
+ * Telegram 跳转和返回封装函数
+ * @param {Page} page - Playwright 页面对象
+ * @param {string} parentSelector - 父容器选择器，例如 '.link-wrapper'
+ * @param {Object} options - 可选配置
+ * @param {string} options.telegramText - Telegram 文本标识，默认 'Telegram'
+ * @param {number} options.jumpTimeout - 跳转等待超时时间（毫秒），默认 5000
+ * @param {number} options.waitAfterBack - 返回后等待时间（毫秒），默认 1000
+ * @param {boolean} options.verifyReturn - 是否验证返回到原页面，默认 true
+ * @returns {Promise<Object>} 返回结果对象
+ */
+export async function handleTelegramJump(page, parentSelector, options = {}) {
+    const {
+        telegramText = 'Telegram',
+        jumpTimeout = 5000,
+        waitAfterBack = 1000,
+        verifyReturn = true,
+        name = ''
+    } = options;
+
+    const result = {
+        success: false,
+        jumped: false,
+        returned: false,
+        originalUrl: null,
+        jumpUrl: null,
+        returnUrl: null,
+        error: null
+    };
+
+    try {
+        // 记录原始 URL
+        result.originalUrl = page.url();
+        console.log(`        📍 原始页面: ${result.originalUrl}`);
+
+        // 1. 定位父容器
+        const parentContainer = page.locator(parentSelector);
+        const parentVisible = await parentContainer.isVisible({ timeout: 3000 }).catch(() => false);
+
+        if (!parentVisible) {
+            result.error = `父容器 "${name}" 不可见`;
+            console.log(`        ⚠️ ${result.error}`);
+            return result;
+        }
+
+        // 2. 在父容器中查找包含 Telegram 文本的子元素
+        const telegramItem = parentContainer.locator('> *').filter({ hasText: telegramText });
+        const telegramVisible = await telegramItem.isVisible({ timeout: 3000 }).catch(() => false);
+
+        if (!telegramVisible) {
+            result.error = `在 "${name}" 中未找到 "${telegramText}" 元素`;
+            console.log(`        ⚠️ ${result.error}`);
+
+            return result;
+        }
+
+        console.log(`        ✓ 找到 ${telegramText} 元素`);
+
+        // 3. 点击 Telegram 元素（优先点击 SVG，如果没有则点击元素本身）
+        const svgElement = telegramItem.locator('svg');
+        const hasSvg = await svgElement.count() > 0;
+
+        if (hasSvg) {
+            await svgElement.first().click();
+            console.log(`        ✓ 点击 ${telegramText} SVG 图标`);
+        } else {
+            await telegramItem.first().click();
+            console.log(`        ✓ 点击 ${telegramText} 元素`);
+        }
+
+        // 4. 等待 URL 变化（跳转）
+        try {
+            await page.waitForURL(
+                (url) => url.toString() !== result.originalUrl,
+                { timeout: jumpTimeout }
+            );
+
+            result.jumpUrl = page.url();
+            result.jumped = true;
+            console.log(`        ✅ 跳转成功: ${result.jumpUrl}`);
+
+            // 验证是否跳转到 Telegram
+            if (result.jumpUrl.includes('telegram') || result.jumpUrl.includes('t.me')) {
+                console.log(`        ✅ 确认跳转到 Telegram 页面`);
+            } else {
+                console.log(`        ⚠️ 跳转到其他页面（非 Telegram）`);
+            }
+
+        } catch (error) {
+            result.error = `跳转超时: ${error.message}`;
+            console.log(`        ⚠️ ${result.error}`);
+            return result;
+        }
+
+        // 5. 返回原页面
+        console.log(`        ⬅️ 返回原页面...`);
+        await page.goBack();
+        await page.waitForLoadState('domcontentloaded');
+
+        // 等待页面稳定
+        if (waitAfterBack > 0) {
+            await page.waitForTimeout(waitAfterBack);
+        }
+
+        result.returnUrl = page.url();
+        result.returned = true;
+        console.log(`        ✓ 返回完成: ${result.returnUrl}`);
+
+        // 6. 验证是否回到原页面
+        if (verifyReturn) {
+            if (result.returnUrl === result.originalUrl) {
+                console.log(`        ✅ 成功返回原页面`);
+                result.success = true;
+            } else {
+                result.error = '返回的页面与原页面不同';
+                console.log(`        ⚠️ ${result.error}`);
+                console.log(`        预期: ${result.originalUrl}`);
+                console.log(`        实际: ${result.returnUrl}`);
+            }
+        } else {
+            result.success = true;
+        }
+
+    } catch (error) {
+        result.error = error.message;
+        console.log(`        ❌ Telegram 跳转处理失败: ${error.message}`);
+    }
+
+    return result;
+}
+
+/**
  * 区域定位器类 - 先定位区域，再操作子元素
  */
 export class PageRegion {
@@ -255,4 +386,160 @@ export async function getRegion(page, selector, options = {}) {
     const region = new PageRegion(page);
     await region.enterRegion(selector, options);
     return region.region;
+}
+
+
+/**
+ * 失败处理函数 - 自动截图并返回 false
+ * @param {Object} test - TestCase 实例
+ * @param {string} errorMessage - 错误信息
+ * @param {Object} options - 配置选项
+ * @returns {Promise<boolean>} - 返回 false
+ */
+export async function handleFailure(test, errorMessage, options = {}) {
+    const { screenshot = true, throwError = false } = options;
+
+    console.log(`        ❌ ${errorMessage}`);
+
+    // 截图
+    if (screenshot && test && test.currentPageRecord && !test.page.isClosed()) {
+        try {
+            const screenshotPath = await test.captureScreenshot(`error-${Date.now()}`);
+
+            // 标记为错误截图
+            if (test.currentPageRecord) {
+                test.currentPageRecord.errorScreenshotTaken = true;
+                test.currentPageRecord.screenshots.push({
+                    name: `错误: ${errorMessage}`,
+                    path: screenshotPath,
+                    timestamp: new Date().toISOString(),
+                    isError: true
+                });
+            }
+
+            console.log(`        📸 已截取错误截图`);
+        } catch (e) {
+            console.log(`        ⚠️ 截图失败: ${e.message}`);
+        }
+    }
+
+    // 如果需要抛出异常
+    if (throwError) {
+        throw new Error(errorMessage);
+    }
+
+    return false;
+}
+
+
+
+/**
+ * 验证元素是否存在及其内容，主要是验证Rulse里面有没有内容
+ * @param {Page} page - Playwright page 对象
+ * @param {string} selector - CSS 选择器
+ * @returns {Promise<Object>} 验证结果
+ */
+export async function verifyElementContent(page, selector) {
+    const element = page.locator(selector);
+
+    const result = {
+        exists: false,
+        hasText: false,
+        hasImages: false,
+        hasContent: false,  // 新增：是否有任何内容
+        isEmpty: true,      // 新增：容器是否为空
+        text: '',
+        imageCount: 0
+    };
+
+    // 检查元素是否存在
+    result.exists = await element.count() > 0;
+    if (!result.exists) return result;
+
+    // 检查文字
+    result.text = (await element.innerText()).trim();
+    result.hasText = result.text.length > 0;
+
+    // 检查图片
+    result.imageCount = await element.locator('img').count();
+    result.hasImages = result.imageCount > 0;
+
+    // 判断容器是否有内容
+    result.hasContent = result.hasText || result.hasImages;
+    result.isEmpty = !result.hasContent;
+
+    return result;
+}
+
+
+/**
+ * 滑动加载更多数据 排行榜的滑动
+ * @param {Page} page - Playwright page 对象
+ * @param {string} containerSelector - 滚动容器选择器
+ * @param {string} itemSelector - 子元素选择器
+ * @param {number} threshold - 触发滑动的阈值（默认8）
+ */
+export async function scrollToLoadAll(page, containerSelector, itemSelector, threshold = 8) {
+    const container = page.locator(containerSelector);
+
+    // 检查容器是否存在
+    if (await container.count() === 0) {
+        console.log('❌ 容器不存在');
+        return;
+    }
+
+    // 获取初始 item 数量
+    let itemCount = await container.locator(itemSelector).count();
+    console.log(`初始 item 数量: ${itemCount}`);
+
+    // 如果少于等于阈值，不需要滑动
+    if (itemCount <= threshold) {
+        console.log(`item 数量 (${itemCount}) <= ${threshold}，无需滑动`);
+        return;
+    }
+
+    console.log(`item 数量 (${itemCount}) > ${threshold}，开始滑动...`);
+
+    // 获取容器的位置和大小
+    const containerBox = await container.boundingBox();
+    if (!containerBox) {
+        console.log('❌ 无法获取容器位置');
+        return;
+    }
+
+    let previousCount = 0;
+    let noChangeCount = 0;
+    const maxNoChangeAttempts = 3; // 连续3次无变化则停止
+
+    while (noChangeCount < maxNoChangeAttempts) {
+        previousCount = await container.locator(itemSelector).count();
+
+        // 在容器内执行向上滑动（手指从下往上滑）
+        const startX = containerBox.x + containerBox.width / 2;
+        const startY = containerBox.y + containerBox.height * 0.8;
+        const endY = containerBox.y + containerBox.height * 0.2;
+
+        // 模拟手指滑动
+        await page.mouse.move(startX, startY);
+        await page.mouse.down();
+        await page.mouse.move(startX, endY, { steps: 10 });
+        await page.mouse.up();
+
+        // 等待可能的数据加载
+        await page.waitForTimeout(500);
+
+        // 检查是否有新的 item
+        const currentCount = await container.locator(itemSelector).count();
+        console.log(`滑动后 item 数量: ${currentCount}`);
+
+        if (currentCount === previousCount) {
+            noChangeCount++;
+            console.log(`无新数据，连续 ${noChangeCount} 次`);
+        } else {
+            noChangeCount = 0; // 重置计数
+        }
+    }
+
+    const finalCount = await container.locator(itemSelector).count();
+    console.log(`✅ 滑动完成，最终 item 数量: ${finalCount}`);
 }

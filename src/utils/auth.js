@@ -233,8 +233,40 @@ export class AuthHelper {
             await this.t.step('验证首页加载', async () => {
                 await this.t.assert.textContains('#home', 'Home', '首页未找到 Home');
             });
-
+            // 处理首页的认证弹窗
             await this.handlePopups();
+
+            // 处理首页的登录前弹窗（.dialog-body）
+            try {
+                const dialogBody = this.page.locator('.dialog-body');
+                const isDialog = await dialogBody.isVisible({ timeout: 2000 }).catch(() => false);
+
+                if (isDialog) {
+                    console.log('        ℹ️ 检测到 .dialog-body 弹窗');
+
+                    // 尝试多种关闭方式
+                    const closeSelectors = ['.close', '.dialog-close', 'button:has-text("Close")', '[aria-label="Close"]'];
+
+                    for (const selector of closeSelectors) {
+                        try {
+                            const closeBtn = this.page.locator(selector).first();
+                            const isVisible = await closeBtn.isVisible({ timeout: 1000 }).catch(() => false);
+
+                            if (isVisible) {
+                                await closeBtn.click({ timeout: 3000 });
+                                console.log(`        ✓ 关闭弹窗: ${selector}`);
+                                await this.page.waitForTimeout(500);
+                                break;
+                            }
+                        } catch (e) {
+                            // 继续尝试下一个选择器
+                        }
+                    }
+                }
+            } catch (error) {
+                console.log(`      ⚠️ 登录前弹窗处理失败: ${error.message}`);
+                // 不抛出错误，继续执行
+            }
 
             await this.t.step('点击 Login 按钮', async () => {
                 try {
@@ -507,16 +539,21 @@ export class AuthHelper {
 
     async handlePopups() {
         await this.t.step('检查登录前弹窗', async () => {
-            const selectors = ['text=Claim My Bonus', '.popup-close', '.modal-close'];
+            const selectors = ['text=Claim My Bonus', '.popup-close', '.modal-close', '.dialog-close'];
+
             for (const selector of selectors) {
                 try {
                     const el = this.page.locator(selector).first();
-                    if (await el.isVisible({ timeout: 1500 })) {
-                        await el.click();
+                    const isVisible = await el.isVisible({ timeout: 1500 }).catch(() => false);
+
+                    if (isVisible) {
+                        await el.click({ timeout: 3000 });
                         await this.page.waitForTimeout(500);
                         console.log(`        ✓ 关闭: ${selector}`);
                     }
-                } catch (e) { }
+                } catch (e) {
+                    // 静默处理，继续尝试下一个选择器
+                }
             }
         });
     }

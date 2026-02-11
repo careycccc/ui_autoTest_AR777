@@ -107,9 +107,10 @@ export class TestCase {
    * 切换到新页面（核心方法）
    * @param {string} pageName - 页面名称
    * @param {Object} options - 选项
+   * @returns {Promise<boolean>} - 返回 true 表示成功，false 表示失败
    */
   async switchToPage(pageName, options = {}) {
-    await this.pageManager.switchTo(pageName, options);
+    return await this.pageManager.switchTo(pageName, options);
   }
 
   /**

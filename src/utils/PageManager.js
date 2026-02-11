@@ -69,40 +69,46 @@ export class PageManager {
       takeScreenshot = true
     } = options;
 
-    console.log(`\n      🔄 页面切换: → ${pageName}`);
+    try {
+      console.log(`\n      🔄 页面切换: → ${pageName}`);
 
-    // 1. 完成上一个页面的记录
-    if (collectPreviousPage && this.t.currentPageRecord) {
-      await this.finishCurrentPage(takeScreenshot);
+      // 1. 完成上一个页面的记录
+      if (collectPreviousPage && this.t.currentPageRecord) {
+        await this.finishCurrentPage(takeScreenshot);
+      }
+
+      // 2. 等待新页面稳定
+      await this.waitForPageReady(options);
+
+      // 3. 重置性能监控 + 记录切换时间
+      await this.t.performanceMonitor.reset();
+
+      // 4. 创建新页面记录
+      this.t.createPageRecord(pageName);
+
+      // 5. 重新初始化性能监控（复用 CDP Session）
+      await this.t.performanceMonitor.start();
+      await this.t.performanceMonitor.injectWebVitals();
+
+      // 6. 短暂等待让性能数据稳定（不影响采集）
+      if (waitTime > 0) {
+        await this.page.waitForTimeout(waitTime);
+      }
+
+      // 7. 标记采集起点
+      await this.t.performanceMonitor.markCollectStart();
+
+      // 8. 截图
+      if (takeScreenshot) {
+        await this.takePageScreenshot(pageName, 'loaded');
+      }
+
+      console.log(`      ✓ 已进入: ${pageName}`);
+      return true; // 成功返回 true
+    } catch (error) {
+      console.error(`      ❌ 页面切换失败: ${error.message}`);
+      return false; // 失败返回 false
     }
-
-    // 2. 等待新页面稳定
-    await this.waitForPageReady(options);
-
-    // 3. 重置性能监控 + 记录切换时间
-    await this.t.performanceMonitor.reset();
-
-    // 4. 创建新页面记录
-    this.t.createPageRecord(pageName);
-
-    // 5. 重新初始化性能监控（复用 CDP Session）
-    await this.t.performanceMonitor.start();
-    await this.t.performanceMonitor.injectWebVitals();
-
-    // 6. 短暂等待让性能数据稳定（不影响采集）
-    if (waitTime > 0) {
-      await this.page.waitForTimeout(waitTime);
-    }
-
-    // 7. 标记采集起点
-    await this.t.performanceMonitor.markCollectStart();
-
-    // 8. 截图
-    if (takeScreenshot) {
-      await this.takePageScreenshot(pageName, 'loaded');
-    }
-
-    console.log(`      ✓ 已进入: ${pageName}`);
   }
 
 

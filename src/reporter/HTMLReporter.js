@@ -43,49 +43,71 @@ export class HTMLReporter {
   groupPagesByParent(allPageRecords) {
     const groups = [];
     const parentMap = new Map();
+    const processedIndices = new Set();
 
+    // 第一步：收集所有被引用的父页面名称
+    const referencedParentNames = new Set();
+    allPageRecords.forEach(page => {
+      if (page.parentTab) referencedParentNames.add(page.parentTab);
+    });
+
+    // 第二步：识别父页面（没有 parentTab/parentCase 且被其他页面引用）
     allPageRecords.forEach((page, index) => {
       const pageName = page.name || `页面 ${index + 1}`;
-      const parentTab = page.parentTab;
-      const parentCase = page.parentCase;
+      const hasNoParent = !page.parentTab && !page.parentCase;
 
-      // 🔥 如果有父用例信息，按父用例分组
-      if (parentTab && parentCase) {
-        // 🔥 修复：使用 parentTab + parentCase 作为唯一 key，确保每个大类只显示自己的子用例
-        const parentKey = `${parentTab}-${parentCase}`;
-
-        // 🔥 检查父组是否已存在，避免重复创建
-        if (!parentMap.has(parentKey)) {
-          const parentGroup = {
-            name: parentTab,
-            caseName: parentCase,
-            index: index,
-            children: [],
-            isParent: true
-          };
-          parentMap.set(parentKey, parentGroup);
-          groups.push(parentGroup);
-        }
-
-        // 添加为子页面
-        parentMap.get(parentKey).children.push({
-          name: `${parentCase} - ${pageName}`,
-          fullName: pageName,
-          index: index,
-          page: page,
-          caseName: parentCase
-        });
-      } else {
-        // 独立页面（没有父用例信息）
-        const group = {
+      if (hasNoParent && referencedParentNames.has(pageName)) {
+        // 这是一个父页面
+        const parentGroup = {
           name: pageName,
           index: index,
           children: [],
-          isParent: false,
-          page: page
+          isParent: true,
+          parentPage: page
         };
-        groups.push(group);
+        parentMap.set(pageName, parentGroup);
+        groups.push(parentGroup);
+        processedIndices.add(index);
       }
+    });
+
+    // 第三步：将子页面添加到对应的父分组
+    allPageRecords.forEach((page, index) => {
+      if (processedIndices.has(index)) return;
+
+      const pageName = page.name || `页面 ${index + 1}`;
+      const parentTab = page.parentTab;
+
+      if (parentTab) {
+        // 有父页面，添加到父分组
+        const parentGroup = parentMap.get(parentTab);
+        if (parentGroup) {
+          parentGroup.children.push({
+            name: pageName,
+            fullName: pageName,
+            index: index,
+            page: page,
+            caseName: page.parentCase
+          });
+          processedIndices.add(index);
+        }
+      }
+    });
+
+    // 第四步：处理剩余的独立页面（没有父页面且不是父页面）
+    allPageRecords.forEach((page, index) => {
+      if (processedIndices.has(index)) return;
+
+      const pageName = page.name || `页面 ${index + 1}`;
+      const group = {
+        name: pageName,
+        index: index,
+        children: [],
+        isParent: false,
+        page: page
+      };
+      groups.push(group);
+      processedIndices.add(index);
     });
 
     return groups;
@@ -98,16 +120,23 @@ export class HTMLReporter {
     pageGroups.forEach((group, groupIndex) => {
       if (group.children.length > 0) {
         // 有子页面的父页面 - 手风琴样式
+        const totalCount = group.children.length + 1; // +1 是父页面本身
         html += `
           <div class="page-nav-group">
             <button class="page-nav-parent ${groupIndex === 0 ? 'active' : ''}" data-group="${groupIndex}">
               <span class="nav-icon">▶</span>
               ${group.name}
-              <span class="child-count">(${group.children.length})</span>
+              <span class="child-count">(${totalCount})</span>
             </button>
             <div class="page-nav-children ${groupIndex === 0 ? 'expanded' : ''}">
+              <!-- 第一项：父页面本身 -->
+              <button class="page-nav-btn page-nav-child ${groupIndex === 0 ? 'active' : ''}" data-index="${group.index}">
+                ${group.name}
+                ${group.parentPage?.apiErrors?.length > 0 ? '<span class="error-badge">' + group.parentPage.apiErrors.length + '</span>' : ''}
+              </button>
+              <!-- 后续项：子用例 -->
               ${group.children.map((child, childIndex) => `
-                <button class="page-nav-btn page-nav-child ${groupIndex === 0 && childIndex === 0 ? 'active' : ''}" data-index="${child.index}">
+                <button class="page-nav-btn page-nav-child" data-index="${child.index}">
                   ${child.name}
                   ${child.page?.apiErrors?.length > 0 ? '<span class="error-badge">' + child.page.apiErrors.length + '</span>' : ''}
                 </button>

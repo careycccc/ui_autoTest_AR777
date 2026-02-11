@@ -497,10 +497,21 @@ export class testModule {
             const tab = this.mainTabs[tabName];
             if (tab) {
                 try {
+                    // 🔥 设置当前 Tab 上下文（用于父页面记录）
+                    this.test.currentTabName = tabName;
+                    this.test.currentCaseName = null; // 父页面没有 caseName
+
                     await this._navigateToTab(tab);
                     await this.auth.safeWait(1000);
+
+                    // 🔥 清除上下文，避免影响后续子用例
+                    this.test.currentTabName = null;
+                    this.test.currentCaseName = null;
                 } catch (e) {
                     console.log(`   ⚠️ 进入 ${tabName} 失败: ${e.message}`);
+                    // 清除上下文
+                    this.test.currentTabName = null;
+                    this.test.currentCaseName = null;
                 }
             }
 
