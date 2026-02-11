@@ -1,3 +1,5 @@
+import { performanceConfig } from './performance.config.js';
+
 export default {
   // 调试模式（设为 true 时测试完成后不关闭浏览器）
   debug: true,
@@ -8,7 +10,6 @@ export default {
   browser: {
     headless: false,
     slowMo: 0,
-    // 优化：降低默认采样频率
     args: [
       '--disable-gpu-sandbox',
       '--disable-dev-shm-usage',
@@ -28,50 +29,31 @@ export default {
     video: false
   },
 
-  // 性能监控配置 - 优化
-  performance: {
-    enabled: true,
-    sampleInterval: 1000,  // 降低采样频率（从 500ms 改为 1000ms）
-    collectCPU: true,
-    collectGPU: true,
-    collectFPS: true,
-    collectLongTasks: true,
-    // 新增：移动端优化
-    mobileOptimization: true  // 移动端减少监控开销
-  },
-
-  network: {
-    enabled: true,
-    captureBody: true,
-    maxBodySize: 50000
-  },
-
-  screenshot: {
-    onStep: false,           // 改为 false，减少截图开销
-    onError: true,
-    onThresholdExceeded: true,
-    fullPage: false
-  },
-
+  // 🔥 性能配置（从 performance.config.js 导入）
+  performance: performanceConfig.monitoring,
   thresholds: {
-    lcp: { warning: 2500, critical: 4000 },
-    cls: { warning: 0.1, critical: 0.25 },
-    inp: { warning: 200, critical: 500 },
-    fcp: { warning: 1800, critical: 3000 },
-    ttfb: { warning: 800, critical: 1800 },
-    fid: { warning: 100, critical: 300 },
-    jsHeapSize: { warning: 50, critical: 100 },
-    domNodes: { warning: 1500, critical: 3000 },
-    jsEventListeners: { warning: 500, critical: 1000 },
-    layoutsPerSec: { warning: 50, critical: 100 },
-    styleRecalcsPerSec: { warning: 50, critical: 100 },
-    cpuUsage: { warning: 50, critical: 80 },
-    longTaskDuration: { warning: 50, critical: 100 },
-    longTaskCount: { warning: 5, critical: 10 },
-    fps: { warning: 50, critical: 30 },
-    frameDropRate: { warning: 5, critical: 15 },
-    requestDuration: { warning: 1000, critical: 3000 },
-    failedRequests: { warning: 3, critical: 10 }
+    // 将嵌套的阈值配置展平
+    ...performanceConfig.thresholds.webVitals,
+    ...performanceConfig.thresholds.resources,
+    ...performanceConfig.thresholds.rendering,
+    ...performanceConfig.thresholds.cpu,
+    ...performanceConfig.thresholds.network
+  },
+  screenshot: performanceConfig.screenshot,
+  network: performanceConfig.network,
+
+  // 控制台错误监控配置
+  consoleError: {
+    enabled: true,
+    screenshotDir: './reports/console-errors',
+    screenshotPrefix: 'console-error',
+    massErrorThreshold: 10,
+    massErrorScreenshotInterval: 10,
+    errorTypes: ['error'],  // 只监控错误，不监控警告
+    deduplicateErrors: true,  // 启用错误去重
+    ignorePatterns: [
+      /favicon\.ico/,  // 忽略 favicon 相关错误
+    ]
   },
 
   // ============================================================

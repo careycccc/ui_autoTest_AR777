@@ -174,6 +174,12 @@ export class TestRunner {
       result.status = 'failed';
       result.error = { message: error.message, stack: error.stack };
       console.log('\n    ❌ 测试失败:', error.message);
+
+      // 🔥 标记当前页面为失败状态
+      if (testCase.currentPageRecord) {
+        testCase.currentPageRecord.testFailed = true;
+      }
+
       if (this.config.screenshot.onError) {
         try {
           // 只在还没截过错误图时截图

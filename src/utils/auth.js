@@ -569,7 +569,7 @@ export class AuthHelper {
             const loginApiPromise = this.page.waitForResponse(
                 res => res.url().includes('/api/') &&
                     (res.url().includes('login') || res.url().includes('signin')),
-                { timeout: 30000 }
+                { timeout: 3000 }
             ).catch(() => null);
 
             await this.page.getByTestId('login-submit-btn').click();

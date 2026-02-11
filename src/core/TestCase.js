@@ -4,6 +4,7 @@ import path from 'path';
 import { Assertions } from './Assertions.js';
 import { PerformanceMonitor } from '../monitor/PerformanceMonitor.js';
 import { NetworkMonitor } from '../monitor/NetworkMonitor.js';
+import { ConsoleErrorMonitor } from '../monitor/ConsoleErrorMonitor.js';
 import { ThresholdChecker } from '../monitor/ThresholdChecker.js';
 import { ApiAnalyzer } from '../utils/ApiAnalyzer.js';
 import { PageManager } from '../utils/PageManager.js';
@@ -25,6 +26,7 @@ export class TestCase {
     this.assert = new Assertions(page);
     this.performanceMonitor = new PerformanceMonitor(page, config.performance);
     this.networkMonitor = new NetworkMonitor(page, config.network);
+    this.consoleErrorMonitor = new ConsoleErrorMonitor(page, config.consoleError);
     this.thresholdChecker = new ThresholdChecker(config.thresholds, (name) => this.captureScreenshot(name));
 
     // 新增：API 分析器和页面管理器
@@ -36,11 +38,16 @@ export class TestCase {
     this.networkRequests = [];
     this.thresholdViolations = [];
     this.apiErrors = [];
+    this.consoleErrors = []; // 新增：控制台错误记录
 
     // 页面级记录
     this.pageRecords = [];
     this.currentPageRecord = null;
     this.pageIndex = 0;
+
+    // 🔥 新增：当前执行的用例上下文
+    this.currentCaseName = null;
+    this.currentTabName = null;
 
     // 截图目录
     const reportDir = path.isAbsolute(config.report.outputDir)
@@ -55,6 +62,19 @@ export class TestCase {
 
   async init() {
     await this.networkMonitor.start();
+    await this.consoleErrorMonitor.start();
+
+    // 监听控制台错误
+    this.consoleErrorMonitor.on('error', (errorInfo) => {
+      this.consoleErrors.push(errorInfo);
+
+      if (this.currentPageRecord) {
+        if (!this.currentPageRecord.consoleErrors) {
+          this.currentPageRecord.consoleErrors = [];
+        }
+        this.currentPageRecord.consoleErrors.push(errorInfo);
+      }
+    });
 
     // 监听 API 请求，使用 ApiAnalyzer 分析
     this.networkMonitor.on('request', (req) => {
@@ -163,16 +183,23 @@ export class TestCase {
       performanceData: null,
       apiRequests: [],
       apiErrors: [],
+      consoleErrors: [], // 新增：控制台错误记录
       thresholdViolations: [],
       screenshots: [],
       steps: [],
       // 新增的属性
       screenshotTaken: false,
-      errorScreenshotTaken: false
+      errorScreenshotTaken: false,
+      // 🔥 新增：记录父用例信息
+      parentCase: this.currentCaseName || null,
+      parentTab: this.currentTabName || null
     };
 
     console.log(`\n      ═══════════════════════════════════════`);
     console.log(`      📄 页面 #${this.pageIndex}: ${pageName}`);
+    if (this.currentCaseName) {
+      console.log(`      📂 所属用例: ${this.currentTabName} -> ${this.currentCaseName}`);
+    }
     console.log(`      🔗 ${currentUrl}`);
     console.log(`      ═══════════════════════════════════════`);
 
@@ -405,4 +432,6 @@ export class TestCase {
   getNetworkRequests() { return this.networkRequests; }
   getThresholdViolations() { return this.thresholdViolations; }
   getApiErrors() { return this.apiErrors; }
+  getConsoleErrors() { return this.consoleErrors; }
+  getConsoleErrorStats() { return this.consoleErrorMonitor.getStats(); }
 }

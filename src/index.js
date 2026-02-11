@@ -8,6 +8,26 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
 // ============================================================
+// 检测命令行参数
+// ============================================================
+const isUIMode = process.argv.includes('--ui');
+
+if (isUIMode) {
+  console.log('🔧 调试模式已启用');
+  config.debug = true;
+  config.debugPauseTime = 0;
+  config.report.screenshots = false;
+  config.screenshot.onStep = false;
+  config.screenshot.onError = false;
+  config.screenshot.onThresholdExceeded = false;
+} else {
+  console.log('📊 正常模式：生成报告和截图');
+  config.debug = false;
+  config.report.screenshots = true;
+  config.screenshot.onError = true;
+}
+
+// ============================================================
 // 配置要运行的测试文件
 // ============================================================
 const testFiles = [
@@ -36,8 +56,14 @@ const runner = new TestRunner(config, rootDir);
 
 console.log('\n🧪 UI 自动化测试平台');
 console.log('══════════════════════════════════════════');
-console.log('📋 测试文件: ' + testFiles.length + ' 个');
+console.log('� 运行模式: ' + (isUIMode ? '调试模式 (--ui)' : '正常模式'));
+console.log('� 测试文件: ' + testFiles.length + ' 个');
 console.log('📱 测试设备: ' + testDevices.join(', '));
+if (isUIMode) {
+  console.log('⚠️  调试模式：不生成报告和截图');
+} else {
+  console.log('📸 截图: 启用 | 📄 报告: 启用');
+}
 console.log('══════════════════════════════════════════\n');
 
 runner.run(absoluteTestFiles, { devices: testDevices }).then(results => {

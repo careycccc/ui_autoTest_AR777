@@ -145,6 +145,68 @@ export class testModule {
     }
 
     /**
+     * 🔥 新增：返回父用例界面
+     * @param {object} tab - 父用例的 tab 配置
+     * @param {number} maxAttempts - 最大尝试次数
+     */
+    async _returnToParentTab(tab, maxAttempts = 5) {
+        if (!tab) return false;
+
+        console.log(`      🔙 返回父用例: ${tab.name}`);
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                // 检查是否已经在父用例界面
+                if (tab.waitForSelector) {
+                    const isOnParent = await this.page.locator(tab.waitForSelector)
+                        .isVisible({ timeout: 1000 })
+                        .catch(() => false);
+
+                    if (isOnParent) {
+                        console.log(`      ✓ 已在父用例界面`);
+                        return true;
+                    }
+                }
+
+                console.log(`      🔙 第${attempt}次尝试返回...`);
+
+                // 方法1: 点击返回按钮
+                const backSuccess = await this.auth._clickBackButton();
+
+                if (backSuccess) {
+                    await this.auth.safeWait(1000);
+
+                    // 验证是否回到父用例界面
+                    if (tab.waitForSelector) {
+                        const isBack = await this.page.locator(tab.waitForSelector)
+                            .isVisible({ timeout: 2000 })
+                            .catch(() => false);
+
+                        if (isBack) {
+                            console.log(`      ✓ 成功返回父用例界面`);
+                            return true;
+                        }
+                    }
+                }
+
+            } catch (e) {
+                console.log(`      ⚠️ 返回尝试${attempt}失败: ${e.message}`);
+            }
+        }
+
+        // 所有返回尝试都失败，使用强制导航
+        console.log(`      ⚠️ 返回按钮方式失败，使用强制导航`);
+        try {
+            await this._navigateToTab(tab);
+            console.log(`      ✓ 强制导航成功`);
+            return true;
+        } catch (e) {
+            console.log(`      ❌ 强制导航也失败: ${e.message}`);
+            return false;
+        }
+    }
+
+    /**
      * 离开指定 Tab
      */
     async _leaveTab(tab) {
@@ -393,7 +455,7 @@ export class testModule {
      * @param {string[]} options.tabOrder           - 主目录执行顺序
      * @param {number}   options.defaultRetries     - 默认重试次数
      * @param {number}   options.retryDelay         - 重试间隔(ms)
-     * @param {boolean}  options.resetBeforeEachCase - 每个用例前是否回到首页
+     * @param {boolean}  options.resetBeforeEachCase - 每个用例前是否回到当前目录页
      * @param {Function} options.onCaseDone         - 每个用例完成后的回调
      */
     async runSequential(options = {}) {
@@ -456,32 +518,41 @@ export class testModule {
 
                     try {
                         // 重试前重置状态
-                        if (resetBeforeEachCase && attempt > 1) {
-                            console.log(`      🔄 重试前回到首页...`);
-                            await this.auth._ensureOnHomePage().catch(() => { });
-                            await this.auth.safeWait(retryDelay);
+                        if (attempt > 1) {
+                            console.log(`      🔄 第 ${attempt}/${maxRetries} 次重试...`);
 
-                            // 🔥 重新进入主目录（使用统一导航）
+                            // 🔥 不回首页，直接回到当前主目录
                             if (tab) {
                                 try {
-                                    await this._navigateToTab(tab);
+                                    // 先尝试直接重新进入当前目录
+                                    await this._dismissAllOverlays();
+                                    await this._clickAndWaitTab(tab);
+                                    console.log(`      🔄 已回到 ${tabName}`);
                                 } catch (navErr) {
-                                    console.log(`      ⚠️ 重新进入 ${tabName} 失败: ${navErr.message}`);
+                                    // 直接进入失败，才回首页再进
+                                    console.log(`      ⚠️ 直接回到 ${tabName} 失败，尝试从首页进入...`);
+                                    await this.auth._ensureOnHomePage().catch(() => { });
+                                    await this.auth.safeWait(retryDelay);
+                                    try {
+                                        await this._clickAndWaitTab(tab);
+                                    } catch (e2) {
+                                        console.log(`      ⚠️ 从首页进入 ${tabName} 也失败: ${e2.message}`);
+                                    }
                                 }
                                 await this.auth.safeWait(1000);
                             }
                         }
 
-                        if (attempt > 1) {
-                            console.log(`      🔄 第 ${attempt}/${maxRetries} 次重试...`);
-                        }
-
-                        // 🔥 如果用例配置了导航（点击某个按钮 + 可选切换页面），先导航
+                        // 如果用例配置了导航，先导航
                         if (testCase.clickSelector || testCase.switchPage) {
                             await this._navigateToCase(testCase);
                         }
 
-                        // 🔥 执行用例，传入 test 作为第3个参数
+                        // 🔥 设置当前用例上下文
+                        this.test.currentTabName = tabName;
+                        this.test.currentCaseName = testCase.name;
+
+                        // 执行用例
                         await Promise.race([
                             testCase.fn(this.page, this.auth, this.test),
                             new Promise((_, reject) =>
@@ -489,26 +560,43 @@ export class testModule {
                             )
                         ]);
 
+                        // 🔥 清除用例上下文
+                        this.test.currentTabName = null;
+                        this.test.currentCaseName = null;
+
                         const duration = Date.now() - startTime;
                         console.log(`      ✅ 通过 (${duration}ms${attempt > 1 ? `, 第${attempt}次` : ''})`);
                         this._recordResult(testCase.name, 'passed', duration, null, attempt);
                         passed = true;
-                        break; // 成功了就不再重试
+
+                        // 🔥 新增：子用例执行完成后返回父用例界面
+                        if (tab) {
+                            await this._returnToParentTab(tab);
+                        }
+
+                        break;
 
                     } catch (e) {
                         const duration = Date.now() - startTime;
                         console.log(`      ❌ 第${attempt}次失败 (${duration}ms): ${e.message}`);
 
                         if (attempt === maxRetries) {
-                            // 重试次数用完，记录失败并跳过
                             console.log(`      ⏭️ ${maxRetries}次重试用完，跳过此用例`);
                             this._recordResult(testCase.name, 'skipped', duration, e, attempt);
                         } else {
                             this._recordResult(`${testCase.name} (第${attempt}次)`, 'failed', duration, e, attempt);
                         }
 
-                        // 失败恢复
-                        await this.auth._ensureOnHomePage().catch(() => { });
+                        // 🔥 失败恢复：先尝试返回父用例界面
+                        if (tab && attempt < maxRetries) {
+                            console.log(`      🔄 尝试返回父用例界面以便重试...`);
+                            await this._returnToParentTab(tab).catch(() => {
+                                console.log(`      ⚠️ 返回父用例失败，尝试其他恢复方式`);
+                            });
+                        }
+
+                        // 如果返回失败，尝试关闭遮罩
+                        await this._dismissAllOverlays().catch(() => { });
                     }
                 }
 
