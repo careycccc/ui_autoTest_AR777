@@ -52,43 +52,109 @@ export class HTMLReporter {
     });
 
     // 第二步：识别父页面（没有 parentTab/parentCase 且被其他页面引用）
+    // 🔥 改进：对于同名的父页面，选择 URL 最简单的那个（通常是父页面）
+    const candidateParents = new Map(); // key = pageName, value = [pages]
+
+    // 收集所有候选父页面
     allPageRecords.forEach((page, index) => {
       const pageName = page.name || `页面 ${index + 1}`;
-      const hasNoParent = !page.parentTab && !page.parentCase;
+      // 🔥 修复：父页面的特征是 parentCase 为 null（没有子用例名称）
+      // parentTab 可能等于自己的名字，也可能是 null
+      const isParentPage = !page.parentCase || page.parentCase === null || page.parentCase === 'null';
 
-      if (hasNoParent && referencedParentNames.has(pageName)) {
-        // 这是一个父页面
-        const parentGroup = {
-          name: pageName,
-          index: index,
-          children: [],
-          isParent: true,
-          parentPage: page
-        };
-        parentMap.set(pageName, parentGroup);
-        groups.push(parentGroup);
-        processedIndices.add(index);
+      if (isParentPage && referencedParentNames.has(pageName)) {
+        if (!candidateParents.has(pageName)) {
+          candidateParents.set(pageName, []);
+        }
+        candidateParents.get(pageName).push({ page, index });
+        console.log(`🔍 候选父页面: "${pageName}" (index: ${index}, parentTab: "${page.parentTab}", parentCase: "${page.parentCase}")`);
       }
     });
 
-    // 第三步：将子页面添加到对应的父分组
+    // 为每个父页面名称选择最合适的页面
+    candidateParents.forEach((candidates, pageName) => {
+      // 🔥 选择策略：
+      // 1. 优先选择 URL 路径最短的（通常是父页面，如 /earn）
+      // 2. 如果路径长度相同，选择索引最小的（最早创建的）
+      const bestCandidate = candidates.sort((a, b) => {
+        const urlA = a.page.url || '';
+        const urlB = b.page.url || '';
+
+        // 提取路径部分（去掉域名和查询参数）
+        const pathA = urlA.split('?')[0].split('#')[0];
+        const pathB = urlB.split('?')[0].split('#')[0];
+
+        // 计算路径深度（斜杠数量）
+        const depthA = (pathA.match(/\//g) || []).length;
+        const depthB = (pathB.match(/\//g) || []).length;
+
+        if (depthA !== depthB) {
+          return depthA - depthB; // 路径越短越好
+        }
+
+        // 路径深度相同，选择索引小的
+        return a.index - b.index;
+      })[0];
+
+      const parentGroup = {
+        name: pageName,
+        index: bestCandidate.index,
+        children: [],
+        isParent: true,
+        parentPage: bestCandidate.page
+      };
+      parentMap.set(pageName, parentGroup);
+      groups.push(parentGroup);
+      processedIndices.add(bestCandidate.index);
+
+      console.log(`识别父页面: ${pageName} (index: ${bestCandidate.index}, url: ${bestCandidate.page.url})`);
+
+      // 标记其他候选页面为已处理（避免重复）
+      candidates.forEach(({ index }) => {
+        if (index !== bestCandidate.index) {
+          processedIndices.add(index);
+          console.log(`跳过重复的父页面: ${pageName} (index: ${index})`);
+        }
+      });
+    });
+
+    // 🔥 第三步：将子页面添加到对应的父分组（去重）
+    const addedCases = new Map(); // 用于去重：key = parentTab + caseName
+
+    console.log(`\n🔍 开始处理子页面，总页面数: ${allPageRecords.length}`);
+
     allPageRecords.forEach((page, index) => {
       if (processedIndices.has(index)) return;
 
       const pageName = page.name || `页面 ${index + 1}`;
       const parentTab = page.parentTab;
+      const caseName = page.parentCase;
+
+      console.log(`🔍 页面 #${index}: "${pageName}", parentTab: "${parentTab}", parentCase: "${caseName}"`);
 
       if (parentTab) {
         // 有父页面，添加到父分组
         const parentGroup = parentMap.get(parentTab);
+        console.log(`🔍 查找父分组 "${parentTab}": ${parentGroup ? '找到' : '未找到'}`);
+
         if (parentGroup) {
-          parentGroup.children.push({
-            name: pageName,
-            fullName: pageName,
-            index: index,
-            page: page,
-            caseName: page.parentCase
-          });
+          // 🔥 去重：同一个父用例下，相同的 caseName 只添加一次（取第一个）
+          const dedupeKey = `${parentTab}::${caseName}`;
+
+          if (!addedCases.has(dedupeKey)) {
+            parentGroup.children.push({
+              name: pageName,
+              fullName: pageName,
+              index: index,
+              page: page,
+              caseName: caseName
+            });
+            addedCases.set(dedupeKey, true);
+            console.log(`✅ 添加子页面到 "${parentTab}": "${caseName}"`);
+          } else {
+            console.log(`⏭️ 跳过重复子页面: "${caseName}"`);
+          }
+
           processedIndices.add(index);
         }
       }
@@ -110,10 +176,27 @@ export class HTMLReporter {
       processedIndices.add(index);
     });
 
+    // 🔥 第五步：按照定义的顺序排序
+    // 顺序：首页 → 登录页 → 登录成功页 → 5个注册的父用例（按注册顺序）
+    const pageOrder = ['首页', '登录页', '登录成功页', '活动资讯页', '新版返佣', '菜单页', '邀请转盘', 'home'];
+    groups.sort((a, b) => {
+      const aIndex = pageOrder.indexOf(a.name);
+      const bIndex = pageOrder.indexOf(b.name);
+
+      // 如果都在顺序列表中，按顺序排
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      // 如果只有a在列表中，a排前面
+      if (aIndex !== -1) return -1;
+      // 如果只有b在列表中，b排前面
+      if (bIndex !== -1) return 1;
+      // 都不在列表中，保持原顺序
+      return 0;
+    });
+
     return groups;
   }
 
-  // 🔥 新增：渲染手风琴式页面导航
+  // 🔥 改进：渲染手风琴式页面导航
   renderPageNavigation(pageGroups) {
     let html = '';
 
@@ -121,23 +204,29 @@ export class HTMLReporter {
       if (group.children.length > 0) {
         // 有子页面的父页面 - 手风琴样式
         const totalCount = group.children.length + 1; // +1 是父页面本身
+        const hasErrors = group.parentPage?.apiErrors?.length > 0 ||
+          group.children.some(c => c.page?.apiErrors?.length > 0);
+
         html += `
           <div class="page-nav-group">
             <button class="page-nav-parent ${groupIndex === 0 ? 'active' : ''}" data-group="${groupIndex}">
               <span class="nav-icon">▶</span>
               ${group.name}
-              <span class="child-count">(${totalCount})</span>
+              <span class="child-count">${totalCount} 项</span>
+              ${hasErrors ? '<span class="error-badge">!</span>' : ''}
             </button>
             <div class="page-nav-children ${groupIndex === 0 ? 'expanded' : ''}">
               <!-- 第一项：父页面本身 -->
               <button class="page-nav-btn page-nav-child ${groupIndex === 0 ? 'active' : ''}" data-index="${group.index}">
-                ${group.name}
+                <span class="child-icon">📄</span>
+                ${group.name}（主页）
                 ${group.parentPage?.apiErrors?.length > 0 ? '<span class="error-badge">' + group.parentPage.apiErrors.length + '</span>' : ''}
               </button>
               <!-- 后续项：子用例 -->
               ${group.children.map((child, childIndex) => `
                 <button class="page-nav-btn page-nav-child" data-index="${child.index}">
-                  ${child.name}
+                  <span class="child-icon">└─</span>
+                  ${child.caseName || child.name}
                   ${child.page?.apiErrors?.length > 0 ? '<span class="error-badge">' + child.page.apiErrors.length + '</span>' : ''}
                 </button>
               `).join('')}
@@ -145,8 +234,13 @@ export class HTMLReporter {
           </div>
         `;
       } else {
-        // 独立页面
-        html += `<button class="page-nav-btn ${groupIndex === 0 && pageGroups[0].children.length === 0 ? 'active' : ''}" data-index="${group.index}">${group.name}${group.page?.apiErrors?.length > 0 ? '<span class="error-badge">' + group.page.apiErrors.length + '</span>' : ''}</button>`;
+        // 独立页面 - 普通按钮
+        html += `
+          <button class="page-nav-btn page-nav-single ${groupIndex === 0 && pageGroups[0].children.length === 0 ? 'active' : ''}" data-index="${group.index}">
+            ${group.name}
+            ${group.page?.apiErrors?.length > 0 ? '<span class="error-badge">' + group.page.apiErrors.length + '</span>' : ''}
+          </button>
+        `;
       }
     });
 
@@ -220,21 +314,50 @@ export class HTMLReporter {
     .stat-passed .stat-value { color: #10b981; }
     .stat-failed .stat-value { color: #ef4444; }
     .stat-rate .stat-value { color: #667eea; }
+    
+    /* 🔥 失败用例统计区域 - 可点击展开，最高优先级 */
+    .stat-card.stat-failed { cursor: pointer; position: relative; z-index: 10000; }
+    .stat-card.stat-failed:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(239, 68, 68, 0.15); }
+    .failed-cases-dropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 8px; background: white; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.25); z-index: 10001; display: none; max-height: 300px; overflow-y: auto; border: 2px solid #ef4444; }
+    .failed-cases-dropdown.show { display: block; animation: slideDown 0.2s ease-out; }
+    .failed-case-item { padding: 12px 16px; border-bottom: 1px solid #fee2e2; cursor: pointer; transition: all 0.2s; }
+    .failed-case-item:last-child { border-bottom: none; }
+    .failed-case-item:hover { background: #fef2f2; }
+    .failed-case-name { font-size: 13px; font-weight: 500; color: #dc2626; margin-bottom: 4px; }
+    .failed-case-reason { font-size: 12px; color: #6b7280; display: none; }
+    .failed-case-item.expanded .failed-case-reason { display: block; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #fecaca; }
+    
     .page-nav { background: white; border-radius: 12px; padding: 16px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
-    .page-nav-group { display: flex; flex-direction: column; width: 100%; position: relative; }
-    .page-nav-parent { padding: 10px 20px; border: 2px solid #e5e7eb; background: #f9fafb; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: #374151; transition: all 0.2s; display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; }
-    .page-nav-parent:hover { border-color: #667eea; background: white; }
+    
+    /* 🔥 下拉框宽度自适应 */
+    .page-nav-group { display: inline-flex; flex-direction: column; position: relative; margin-bottom: 8px; min-width: fit-content; max-width: 100%; z-index: 100; }
+    
+    .page-nav-parent { padding: 12px 20px; border: 2px solid #e5e7eb; background: #f9fafb; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: #374151; transition: all 0.3s; display: flex; align-items: center; gap: 8px; width: auto; text-align: left; white-space: nowrap; }
+    .page-nav-parent:hover { border-color: #667eea; background: white; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1); }
     .page-nav-parent.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-color: transparent; color: white; }
-    .nav-icon { font-size: 10px; transition: transform 0.2s; display: inline-block; }
-    .page-nav-group:hover .nav-icon { transform: rotate(90deg); }
-    .child-count { font-size: 11px; opacity: 0.7; margin-left: auto; }
-    .page-nav-children { display: none; flex-direction: column; gap: 6px; margin-top: 6px; margin-left: 20px; }
-    .page-nav-group:hover .page-nav-children { display: flex; }
-    .page-nav-child { padding: 8px 16px; border: 1px solid #e5e7eb; background: white; border-radius: 6px; font-size: 13px; }
+    .page-nav-parent.expanded { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+    .nav-icon { font-size: 10px; transition: transform 0.3s; display: inline-block; }
+    .page-nav-group.expanded .nav-icon { transform: rotate(90deg); }
+    .child-count { font-size: 11px; opacity: 0.7; margin-left: auto; padding: 2px 8px; background: rgba(0,0,0,0.05); border-radius: 12px; white-space: nowrap; }
+    .page-nav-parent.active .child-count { background: rgba(255,255,255,0.2); }
+    
+    /* 🔥 下拉列表绝对定位，宽度自适应内容，z-index 低于失败用例下拉框 */
+    .page-nav-children { position: absolute; top: 100%; left: 0; z-index: 99; display: none; flex-direction: column; gap: 4px; padding: 8px; background: white; border: 2px solid #e5e7eb; border-top: none; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); min-width: 100%; width: max-content; }
+    .page-nav-children.expanded { display: flex; animation: slideDown 0.3s ease-out; }
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    .page-nav-child { padding: 10px 16px; border: 1px solid #e5e7eb; background: white; border-radius: 6px; font-size: 13px; display: flex; align-items: center; gap: 8px; transition: all 0.2s; white-space: nowrap; cursor: pointer; }
+    .page-nav-child:hover { border-color: #667eea; background: #f0f4ff; transform: translateX(4px); }
+    .child-icon { font-size: 12px; color: #9ca3af; }
+    
+    /* 🔥 独立页面按钮 */
+    .page-nav-btn.page-nav-single { padding: 10px 20px; border: 2px solid #e5e7eb; background: white; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; color: #374151; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+    .page-nav-btn.page-nav-single:hover { border-color: #667eea; color: #667eea; }
+    .page-nav-btn.page-nav-single.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-color: transparent; color: white; }
+    
     .page-nav-btn { padding: 10px 20px; border: 2px solid #e5e7eb; background: white; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; color: #374151; transition: all 0.2s; }
     .page-nav-btn:hover { border-color: #667eea; color: #667eea; }
     .page-nav-btn.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-color: transparent; color: white; }
-    .error-badge { background: #ef4444; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+    .error-badge { background: #ef4444; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 6px; font-weight: 600; }
     .page-section { display: none; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.1); margin-bottom: 20px; }
     .page-section.active { display: block; }
     .page-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 24px; }
@@ -383,10 +506,27 @@ export class HTMLReporter {
     <div class="stats">
       <div class="stat-card"><div class="stat-value">${totalTests}</div><div class="stat-label">总测试数</div></div>
       <div class="stat-card stat-passed"><div class="stat-value">${passedTests}</div><div class="stat-label">✅ 通过</div></div>
-      <div class="stat-card stat-failed"><div class="stat-value">${failedTests}</div><div class="stat-label">❌ 失败</div></div>
+      <div class="stat-card stat-failed" id="failed-stat-card">
+        <div class="stat-value">${failedTests}</div>
+        <div class="stat-label">❌ 失败</div>
+        ${failedTests > 0 ? `
+          <div class="failed-cases-dropdown" id="failed-cases-dropdown">
+            ${allPageRecords.filter(p => p.testFailed || p.errorScreenshotTaken || (p.apiErrors && p.apiErrors.length > 0)).map((page, idx) => `
+              <div class="failed-case-item" data-page-index="${allPageRecords.indexOf(page)}">
+                <div class="failed-case-name">${idx + 1}. ${page.name}</div>
+                <div class="failed-case-reason">
+                  ${page.apiErrors && page.apiErrors.length > 0 ? '🔴 API错误: ' + page.apiErrors.map(e => e.message || e.error?.message).join(', ') : ''}
+                  ${page.testFailed ? '❌ 测试失败' : ''}
+                  ${page.errorScreenshotTaken ? '📸 已截图' : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
       <div class="stat-card stat-rate"><div class="stat-value">${passRate}%</div><div class="stat-label">通过率</div></div>
       <div class="stat-card"><div class="stat-value">${allPageRecords.length}</div><div class="stat-label">📄 页面</div></div>
-      <div class="stat-card stat-failed"><div class="stat-value">${apiErrors?.length || 0}</div><div class="stat-label">🔴 API错误</div></div>
+      <div class="stat-card"><div class="stat-value">${apiErrors?.length || 0}</div><div class="stat-label">🔴 API错误</div></div>
     </div>
     
     <div class="page-nav">
@@ -398,11 +538,120 @@ export class HTMLReporter {
   </div>
   
   <script>
+    // 🔥 失败用例统计卡片点击展开
+    var failedStatCard = document.getElementById('failed-stat-card');
+    var failedDropdown = document.getElementById('failed-cases-dropdown');
+    
+    if (failedStatCard && failedDropdown) {
+      failedStatCard.addEventListener('click', function(e) {
+        // 如果点击的是失败用例项，不处理
+        if (e.target.closest('.failed-case-item')) return;
+        
+        // 🔥 关闭所有父用例下拉框
+        document.querySelectorAll('.page-nav-children.expanded').forEach(function(dropdown) {
+          dropdown.classList.remove('expanded');
+          var parent = dropdown.closest('.page-nav-group');
+          if (parent) {
+            parent.querySelector('.page-nav-parent').classList.remove('expanded');
+            parent.classList.remove('expanded');
+          }
+        });
+        
+        failedDropdown.classList.toggle('show');
+      });
+      
+      // 点击失败用例项，展开显示原因并跳转到对应页面
+      document.querySelectorAll('.failed-case-item').forEach(function(item) {
+        item.addEventListener('click', function(e) {
+          e.stopPropagation();
+          
+          // 切换展开状态
+          this.classList.toggle('expanded');
+          
+          // 如果是展开状态，跳转到对应页面
+          if (this.classList.contains('expanded')) {
+            var pageIndex = parseInt(this.getAttribute('data-page-index'));
+            if (!isNaN(pageIndex)) {
+              // 关闭下拉框
+              failedDropdown.classList.remove('show');
+              
+              // 切换到对应页面
+              document.querySelectorAll('.page-nav-btn').forEach(function(b) {
+                b.classList.remove('active');
+              });
+              
+              var targetBtn = document.querySelector('.page-nav-btn[data-index="' + pageIndex + '"]');
+              if (targetBtn) {
+                targetBtn.classList.add('active');
+              }
+              
+              document.querySelectorAll('.page-section').forEach(function(s, i) {
+                s.classList.toggle('active', i === pageIndex);
+              });
+            }
+          }
+        });
+      });
+      
+      // 点击外部关闭下拉框
+      document.addEventListener('click', function(e) {
+        if (!failedStatCard.contains(e.target)) {
+          failedDropdown.classList.remove('show');
+        }
+      });
+    }
+    
+    // 🔥 手风琴展开/收起
+    document.querySelectorAll('.page-nav-parent').forEach(function(parent) {
+      parent.addEventListener('click', function(e) {
+        // 如果点击的是子按钮，不处理
+        if (e.target.classList.contains('page-nav-child')) return;
+        
+        var group = this.closest('.page-nav-group');
+        var children = group.querySelector('.page-nav-children');
+        var isExpanded = children.classList.contains('expanded');
+        
+        // 🔥 关闭失败用例下拉框
+        if (failedDropdown) {
+          failedDropdown.classList.remove('show');
+        }
+        
+        // 🔥 关闭其他父用例的下拉框
+        document.querySelectorAll('.page-nav-children.expanded').forEach(function(otherDropdown) {
+          if (otherDropdown !== children) {
+            otherDropdown.classList.remove('expanded');
+            var otherParent = otherDropdown.closest('.page-nav-group');
+            if (otherParent) {
+              otherParent.querySelector('.page-nav-parent').classList.remove('expanded');
+              otherParent.classList.remove('expanded');
+            }
+          }
+        });
+        
+        // 切换展开状态
+        children.classList.toggle('expanded', !isExpanded);
+        this.classList.toggle('expanded', !isExpanded);
+        group.classList.toggle('expanded', !isExpanded);
+      });
+    });
+    
     // 页面切换
     document.querySelectorAll('.page-nav-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
         var index = parseInt(this.getAttribute('data-index'));
         if (isNaN(index)) return;
+        
+        // 🔥 点击子项后自动收起父下拉框
+        var parentGroup = this.closest('.page-nav-group');
+        if (parentGroup) {
+          var children = parentGroup.querySelector('.page-nav-children');
+          var parent = parentGroup.querySelector('.page-nav-parent');
+          if (children && children.classList.contains('expanded')) {
+            children.classList.remove('expanded');
+            parent.classList.remove('expanded');
+            parentGroup.classList.remove('expanded');
+          }
+        }
         
         document.querySelectorAll('.page-nav-btn').forEach(function(b) {
           b.classList.remove('active');
@@ -516,11 +765,21 @@ export class HTMLReporter {
     const consoleErrors = page.consoleErrors || [];
     const screenshots = page.screenshots || [];
 
+    // 🔥 新增：显示来源页面信息
+    let fromPageInfo = '';
+    if (page.previousPage) {
+      fromPageInfo = `<div class="page-url" style="background: rgba(255,255,255,0.15); margin-top: 8px;">
+        ⬅️ 来自: ${page.previousPage.name || '未知页面'} 
+        <span style="opacity: 0.8; font-size: 11px;">(${page.previousPage.url || '未知路由'})</span>
+      </div>`;
+    }
+
     return `
       <div id="page-${index}" class="page-section ${index === 0 ? 'active' : ''}">
         <div class="page-header">
           <div class="page-title">📄 ${page.name || '页面 ' + (index + 1)}</div>
-          <div class="page-url">${page.url}</div>
+          <div class="page-url">🔗 ${page.url || '未知路由'}</div>
+          ${fromPageInfo}
           <div class="page-meta">
             <span>📱 ${page.device}</span>
             <span>🕐 ${page.startTime ? new Date(page.startTime).toLocaleTimeString('zh-CN') : '00:00:00'}</span>

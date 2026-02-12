@@ -1,7 +1,7 @@
 /**
  * 团队返佣相关功能
  */
-import { PageRegion, clickIfTextExists, handleFailure } from '../utils.js';
+import { PageRegion, clickIfTextExists, handleFailure, swipePage } from '../utils.js';
 
 /**
  * 进入团队详情页面
@@ -16,36 +16,48 @@ export async function earnTeamDetail(page, test) {
         }
 
         // 在轮播图中找到 "My team level" 并点击 Detail
-        const slideLocator = page.locator('.swiper-slide').filter({ hasText: 'My team level' });
-        const slideVisible = await slideLocator.isVisible({ timeout: 5000 }).catch(() => false);
+        // 注意：所有 slide 都包含 "My team level" 文本，我们需要找到当前可见的那个
+        console.log('        ℹ️ 查找轮播图中的 Detail 按钮...');
 
-        if (!slideVisible) {
-            console.log('        ℹ️ 未找到 "My team level" slide，尝试滑动查找...');
-            const swiperContainer = page.locator('.swiper-container').first();
-            const containerVisible = await swiperContainer.isVisible({ timeout: 3000 }).catch(() => false);
+        // 方法1：直接查找可见的 Detail 按钮（在 .carousel 容器内）
+        const carousel = page.locator('.carousel').first();
 
-            if (containerVisible) {
-                for (let i = 0; i < 5; i++) {
-                    await swiperContainer.swipe({ direction: 'left' }).catch(() => { });
-                    await page.waitForTimeout(500);
-                    const found = await slideLocator.isVisible({ timeout: 1000 }).catch(() => false);
-                    if (found) {
-                        console.log(`        ✅ 找到 "My team level" slide (滑动 ${i + 1} 次)`);
-                        break;
-                    }
+        // 🔥 先确保轮播图容器滚动到可见位置
+        await carousel.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {
+            console.log('        ⚠️ 轮播图滚动失败，继续尝试');
+        });
+        await page.waitForTimeout(300);
+
+        // 🔥 轮播图使用 transform 隐藏其他 slides，所以第一个 .detail 可能在视口外
+        // 我们需要找到当前可见的 slide 中的 Detail 按钮
+        const detailButtons = carousel.locator('.detail');
+        const detailCount = await detailButtons.count();
+
+        console.log(`        ℹ️ 找到 ${detailCount} 个 Detail 按钮`);
+
+        let clicked = false;
+
+        // 尝试点击每个 Detail 按钮，直到成功
+        for (let i = 0; i < detailCount; i++) {
+            const button = detailButtons.nth(i);
+            const isVisible = await button.isVisible({ timeout: 500 }).catch(() => false);
+
+            if (isVisible) {
+                try {
+                    // 🔥 使用 force: true 强制点击
+                    await button.click({ force: true, timeout: 3000 });
+                    console.log(`        ✅ 已点击第 ${i + 1} 个 Detail 按钮`);
+                    clicked = true;
+                    break;
+                } catch (e) {
+                    console.log(`        ⚠️ 点击第 ${i + 1} 个 Detail 按钮失败: ${e.message}`);
                 }
             }
         }
 
-        // 点击 Detail 按钮
-        const detailButton = slideLocator.locator('text=Detail');
-        const detailVisible = await detailButton.isVisible({ timeout: 3000 }).catch(() => false);
-
-        if (!detailVisible) {
-            return await handleFailure(test, '进入团队详情->Detail 按钮不可见');
+        if (!clicked) {
+            return await handleFailure(test, '进入团队详情->无法点击任何 Detail 按钮');
         }
-
-        await detailButton.click();
         console.log('        ✅ 已点击 Detail 按钮');
 
         // 切换到团队详情页面
@@ -81,18 +93,21 @@ export async function earnWithdrawalRewards(page, test) {
         }
 
         // 在轮播图中找到 "My team level" 并点击 Detail
-        const slideLocator = page.locator('.swiper-slide').filter({ hasText: 'My team level' });
+        // 注意：实际 HTML 使用 .carousel > .track > .slide 结构
+        const slideLocator = page.locator('.slide').filter({ hasText: 'My team level' });
         const slideVisible = await slideLocator.isVisible({ timeout: 5000 }).catch(() => false);
 
         if (!slideVisible) {
-            console.log('        ℹ️ 未找到 "My team level" slide，尝试滑动查找...');
+            console.log('        ℹ️ 未找到 "My team level" slide，尝试点击右箭头查找...');
 
-            const swiperContainer = page.locator('.swiper-container').first();
-            const containerVisible = await swiperContainer.isVisible({ timeout: 3000 }).catch(() => false);
+            const carousel = page.locator('.carousel').first();
+            const containerVisible = await carousel.isVisible({ timeout: 3000 }).catch(() => false);
 
             if (containerVisible) {
+                // 点击右箭头按钮进行滑动
+                const rightArrow = carousel.locator('svg').last();
                 for (let i = 0; i < 5; i++) {
-                    await swiperContainer.swipe({ direction: 'left' }).catch(() => { });
+                    await rightArrow.click({ timeout: 1000 }).catch(() => { });
                     await page.waitForTimeout(500);
 
                     const found = await slideLocator.isVisible({ timeout: 1000 }).catch(() => false);
@@ -105,7 +120,7 @@ export async function earnWithdrawalRewards(page, test) {
         }
 
         // 点击 Detail 按钮
-        const detailButton = slideLocator.locator('text=Detail');
+        const detailButton = slideLocator.locator('text=Detail').or(slideLocator.locator('.detail'));
         if (!await checkElementVisible(detailButton, test, 'Detail 按钮')) {
             return false;
         }
@@ -189,13 +204,38 @@ export async function Withdrawalrewards(page, test) {
             collectPreviousPage: true
         });
 
-        // 5.点击详情里面的筛选按钮
-        await clickIfTextExists(page, 'All', { name: '新版返佣->佣金详情', waitAfter: 500 });
-        await clickIfTextExists(page, 'Bet', { name: '新版返佣->佣金详情', waitAfter: 500 });
-        await clickIfTextExists(page, 'Deposit', { name: '新版返佣->佣金详情', waitAfter: 500 });
-        await clickIfTextExists(page, 'Task', { name: '新版返佣->佣金详情', waitAfter: 500 });
-        await clickIfTextExists(page, 'Invite', { name: '新版返佣->佣金详情', waitAfter: 500 });
-
+        // 5.点击详情里面的筛选按钮（使用 .header 容器限定范围）
+        await clickIfTextExists(page, 'All', {
+            name: '新版返佣->佣金详情',
+            waitAfter: 500,
+            containerSelector: '.header',
+            force: true
+        });
+        await clickIfTextExists(page, 'Bet', {
+            name: '新版返佣->佣金详情',
+            waitAfter: 500,
+            containerSelector: '.header',
+            force: true
+        });
+        await clickIfTextExists(page, 'Deposit', {
+            name: '新版返佣->佣金详情',
+            waitAfter: 500,
+            containerSelector: '.header',
+            force: true
+        });
+        await clickIfTextExists(page, 'Task', {
+            name: '新版返佣->佣金详情',
+            waitAfter: 500,
+            containerSelector: '.header',
+            force: true
+        });
+        await clickIfTextExists(page, 'Invite', {
+            name: '新版返佣->佣金详情',
+            waitAfter: 500,
+            containerSelector: '.header',
+            force: true
+        });
+        await page.waitForTimeout(2000)
         console.log('        ✅ Withdrawal rewards 操作完成');
         return true;
     } catch (error) {

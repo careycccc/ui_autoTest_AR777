@@ -1161,14 +1161,17 @@ export class PerformanceMonitor {
           const scriptDelta = ((m.ScriptDuration || 0) - (this.startMetrics.ScriptDuration || 0)) * 1000;
           const taskDelta = ((m.TaskDuration || 0) - (this.startMetrics.TaskDuration || 0)) * 1000;
 
-          // 使用 TaskDuration 而非 ScriptDuration 计算，更准确
-          const cpuUsage = elapsed > 100
-            ? Math.min(100, Math.round((taskDelta / elapsed) * 100))
-            : Math.min(100, Math.round((m.TaskDuration || 0) * 1000 / Math.max(elapsed, 1) * 100));
+          // 🔥 修复：确保 CPU 使用率不为负数，并限制在 0-100 之间
+          const rawCpuUsage = elapsed > 100
+            ? (taskDelta / elapsed) * 100
+            : (m.TaskDuration || 0) * 1000 / Math.max(elapsed, 1) * 100;
+
+          // 确保 CPU 使用率在 0-100 之间
+          const cpuUsage = Math.max(0, Math.min(100, Math.round(rawCpuUsage)));
 
           result.cpu = {
-            scriptDuration: Math.round(scriptDelta),
-            taskDuration: Math.round(taskDelta),
+            scriptDuration: Math.round(Math.max(0, scriptDelta)),
+            taskDuration: Math.round(Math.max(0, taskDelta)),
             usage: cpuUsage
           };
         }
@@ -1294,7 +1297,7 @@ export class PerformanceMonitor {
           try {
             var largestArea = 0;
             var largestImg = null;
-            document.querySelectorAll('img').forEach(function(el) {
+            document.querySelectorAll('img').forEach(function (el) {
               var rect = el.getBoundingClientRect();
               if (rect.top < window.innerHeight && rect.bottom > 0) {
                 var area = rect.width * rect.height;

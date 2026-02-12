@@ -172,12 +172,26 @@ export class TestCase {
 
   createPageRecord(pageName, url = null) {
     this.pageIndex++;
+
+    // 🔥 优化：立即获取当前 URL，不延迟
     const currentUrl = url || this.page.url();
+
+    // 🔥 记录前一个页面信息（用于显示"来自"）
+    const previousPage = this.currentPageRecord ? {
+      name: this.currentPageRecord.name,
+      url: this.currentPageRecord.url
+    } : null;
+
+    // 🔥 调试：打印当前上下文
+    console.log(`\n      ═══════════════════════════════════════`);
+    console.log(`      📄 页面 #${this.pageIndex}: ${pageName}`);
+    console.log(`      🔍 DEBUG - currentTabName: "${this.currentTabName}", currentCaseName: "${this.currentCaseName}"`);
+    console.log(`      🔍 DEBUG - 即将设置 parentTab: "${this.currentTabName || null}", parentCase: "${this.currentCaseName || null}"`);
 
     this.currentPageRecord = {
       index: this.pageIndex,
       name: pageName,
-      url: currentUrl,
+      url: currentUrl,  // 🔥 立即记录 URL
       device: this.currentDevice?.name || 'Desktop',
       startTime: new Date().toISOString(),
       endTime: null,
@@ -191,20 +205,129 @@ export class TestCase {
       // 新增的属性
       screenshotTaken: false,
       errorScreenshotTaken: false,
-      // 🔥 新增：记录父用例信息
+      testFailed: false, // 🔥 新增：标记测试是否失败
+      failureReason: null, // 🔥 新增：失败原因
+      // 🔥 记录父用例信息
       parentCase: this.currentCaseName || null,
-      parentTab: this.currentTabName || null
+      parentTab: this.currentTabName || null,
+      // 🔥 记录前一个页面信息
+      previousPage: previousPage
     };
 
-    console.log(`\n      ═══════════════════════════════════════`);
-    console.log(`      📄 页面 #${this.pageIndex}: ${pageName}`);
+    // 🔥 验证：打印实际设置的值
+    console.log(`      ✅ 已设置 parentTab: "${this.currentPageRecord.parentTab}", parentCase: "${this.currentPageRecord.parentCase}"`);
+
     if (this.currentCaseName) {
       console.log(`      📂 所属用例: ${this.currentTabName} -> ${this.currentCaseName}`);
+    } else if (this.currentTabName) {
+      console.log(`      📂 父用例: ${this.currentTabName}`);
     }
-    console.log(`      🔗 ${currentUrl}`);
+    console.log(`      🔗 当前路由: ${currentUrl}`);
+    if (previousPage) {
+      console.log(`      ⬅️ 来自: ${previousPage.name} (${previousPage.url})`);
+    }
     console.log(`      ═══════════════════════════════════════`);
 
     return this.currentPageRecord;
+  }
+
+  /**
+   * 🔥 新增：等待页面完全就绪（LCP 完成或 3 秒超时）
+   * 在所有页面操作前调用此方法
+   */
+  async waitForPageReady(timeoutMs = 3000) {
+    try {
+      console.log(`      ⏳ 等待页面就绪（LCP 或 ${timeoutMs}ms 超时）...`);
+
+      const startTime = Date.now();
+
+      // 等待 LCP 完成
+      const lcpResult = await Promise.race([
+        this.page.evaluate(() => {
+          return new Promise((resolve) => {
+            if ('PerformanceObserver' in window) {
+              try {
+                const observer = new PerformanceObserver((list) => {
+                  const entries = list.getEntries();
+                  const lastEntry = entries[entries.length - 1];
+                  if (lastEntry) {
+                    observer.disconnect();
+                    resolve({
+                      lcp: lastEntry.renderTime || lastEntry.loadTime,
+                      element: lastEntry.element?.tagName || 'unknown'
+                    });
+                  }
+                });
+                observer.observe({ type: 'largest-contentful-paint', buffered: true });
+              } catch (e) {
+                resolve(null);
+              }
+            } else {
+              resolve(null);
+            }
+          });
+        }),
+        new Promise(resolve => setTimeout(() => resolve(null), timeoutMs))
+      ]);
+
+      const elapsed = Date.now() - startTime;
+
+      if (lcpResult && lcpResult.lcp) {
+        console.log(`      ✅ LCP 完成: ${Math.round(lcpResult.lcp)}ms (元素: ${lcpResult.element})`);
+      } else {
+        console.log(`      ⏱️ 等待超时 ${elapsed}ms，继续执行`);
+      }
+
+      // 额外等待确保渲染稳定
+      await this.page.waitForTimeout(300);
+
+      return true;
+    } catch (error) {
+      console.log(`      ⚠️ 等待页面就绪出错: ${error.message}`);
+      // 出错时至少等待 1 秒
+      await this.page.waitForTimeout(1000);
+      return false;
+    }
+  }
+
+  /**
+   * 🔥 新增：标记当前页面测试失败
+   */
+  markPageTestFailed(reason) {
+    if (this.currentPageRecord) {
+      this.currentPageRecord.testFailed = true;
+      this.currentPageRecord.failureReason = reason;
+      console.log(`      ❌ 页面测试失败: ${reason}`);
+    }
+  }
+
+  /**
+   * 🔥 新增：捕获错误截图
+   */
+  async captureErrorScreenshot(errorName = 'error') {
+    if (this.currentPageRecord && !this.currentPageRecord.errorScreenshotTaken) {
+      try {
+        const safeName = errorName.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-\u4e00-\u9fa5]/g, '');
+        const screenshotName = `page-${this.pageIndex}-${safeName}-${Date.now()}`;
+        const screenshot = await this.captureScreenshot(screenshotName);
+
+        this.currentPageRecord.screenshots.push({
+          name: `错误截图 - ${errorName}`,
+          path: screenshot,
+          timestamp: new Date().toISOString(),
+          isError: true
+        });
+
+        this.currentPageRecord.errorScreenshotTaken = true;
+        console.log(`      📸 已截取错误截图`);
+
+        return screenshot;
+      } catch (e) {
+        console.warn(`      ⚠️ 错误截图失败: ${e.message}`);
+        return null;
+      }
+    }
+    return null;
   }
 
   // ====== 测试基础方法 ======

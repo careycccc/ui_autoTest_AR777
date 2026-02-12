@@ -118,12 +118,16 @@ export class testModule {
      * @param {object} tab - 已注册的 tab 配置
      */
     async _navigateToTab(tab) {
+        console.log(`   🔍 [_navigateToTab] 开始导航到: ${tab.name}`);
+        console.log(`   🔍 [_navigateToTab] 当前上下文 - currentTabName: "${this.test.currentTabName}", currentCaseName: "${this.test.currentCaseName}"`);
+
         // Step 1: 点击选择器
         await this.page.locator(tab.selector).click({ timeout: 10000 });
 
         // Step 2: 根据 switchPage 决定导航方式
         if (tab.switchPage) {
             // ✅ 切换页面模式：使用 test.switchToPage()
+            console.log(`   🔍 [_navigateToTab] 即将调用 switchToPage，pageName: "${tab.pageName}"`);
             await this.test.switchToPage(tab.pageName, {
                 waitForSelector: tab.waitForSelector,
                 waitTime: tab.waitTime,
@@ -142,6 +146,8 @@ export class testModule {
         if (tab.onEnter) {
             await tab.onEnter(this.page, this.auth, this.test);
         }
+
+        console.log(`   🔍 [_navigateToTab] 导航完成`);
     }
 
     /**
@@ -149,42 +155,101 @@ export class testModule {
      * @param {object} tab - 父用例的 tab 配置
      * @param {number} maxAttempts - 最大尝试次数
      */
-    async _returnToParentTab(tab, maxAttempts = 5) {
+    async _returnToParentTab(tab, maxAttempts = 3) {
         if (!tab) return false;
 
         console.log(`      🔙 返回父用例: ${tab.name}`);
+        console.log(`      🔍 验证选择器: ${tab.waitForSelector}`);
 
+        // 🔥 先检查是否已经在父用例界面
+        const currentUrl = this.page.url();
+        console.log(`      📍 当前路由: ${currentUrl}`);
+
+        if (tab.waitForSelector) {
+            const isOnParent = await this.page.locator(tab.waitForSelector)
+                .isVisible({ timeout: 1000 })
+                .catch(() => false);
+
+            if (isOnParent) {
+                console.log(`      ✓ 已在父用例界面`);
+                return true;
+            }
+        }
+
+        // 🔥 检查是否在 Home 页面（如果是，直接导航到父用例）
+        const urlPath = new URL(currentUrl).pathname;
+        const isOnHome = urlPath === '/' || urlPath === '';
+
+        if (isOnHome) {
+            console.log(`      ⚠️ 当前在 Home 页面，直接导航到父用例`);
+            try {
+                await this._navigateToTab(tab);
+                console.log(`      ✓ 导航成功`);
+                return true;
+            } catch (e) {
+                console.log(`      ❌ 导航失败: ${e.message}`);
+                return false;
+            }
+        }
+
+        // 🔥 尝试点击返回按钮
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                // 检查是否已经在父用例界面
-                if (tab.waitForSelector) {
-                    const isOnParent = await this.page.locator(tab.waitForSelector)
-                        .isVisible({ timeout: 1000 })
-                        .catch(() => false);
-
-                    if (isOnParent) {
-                        console.log(`      ✓ 已在父用例界面`);
-                        return true;
-                    }
-                }
-
                 console.log(`      🔙 第${attempt}次尝试返回...`);
 
-                // 方法1: 点击返回按钮
+                // 点击返回按钮
                 const backSuccess = await this.auth._clickBackButton();
 
                 if (backSuccess) {
-                    await this.auth.safeWait(1000);
+                    // 等待页面加载
+                    await this.auth.safeWait(2000);
+                    await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => { });
+
+                    // 检查返回后的 URL
+                    const newUrl = this.page.url();
+                    console.log(`      📍 返回后路由: ${newUrl}`);
+
+                    // 🔥 如果返回到了 Home 页面，直接导航到父用例
+                    const newUrlPath = new URL(newUrl).pathname;
+                    const returnedToHome = newUrlPath === '/' || newUrlPath === '';
+
+                    if (returnedToHome) {
+                        console.log(`      ⚠️ 返回到了 Home 页面，重新导航到父用例`);
+                        try {
+                            await this._navigateToTab(tab);
+                            console.log(`      ✓ 导航成功`);
+                            return true;
+                        } catch (e) {
+                            console.log(`      ❌ 导航失败: ${e.message}`);
+                            continue;
+                        }
+                    }
 
                     // 验证是否回到父用例界面
                     if (tab.waitForSelector) {
                         const isBack = await this.page.locator(tab.waitForSelector)
-                            .isVisible({ timeout: 2000 })
+                            .isVisible({ timeout: 3000 })
                             .catch(() => false);
 
                         if (isBack) {
                             console.log(`      ✓ 成功返回父用例界面`);
+
+                            // 🔥 新增：对于新版返佣页面，额外验证是否真正回到了 My Rewards tab
+                            if (tab.name === '新版返佣') {
+                                const myPrivilegesVisible = await this.page.locator('text=My privileges')
+                                    .isVisible({ timeout: 2000 })
+                                    .catch(() => false);
+
+                                if (myPrivilegesVisible) {
+                                    console.log(`      ✅ 已确认回到 My Rewards tab (检测到 "My privileges")`);
+                                } else {
+                                    console.log(`      ℹ️ 可能在 Invite Rewards tab，继续执行`);
+                                }
+                            }
+
                             return true;
+                        } else {
+                            console.log(`      ⚠️ 验证选择器 "${tab.waitForSelector}" 不可见`);
                         }
                     }
                 }
@@ -501,12 +566,13 @@ export class testModule {
                     this.test.currentTabName = tabName;
                     this.test.currentCaseName = null; // 父页面没有 caseName
 
+                    console.log(`   🔍 设置上下文: currentTabName="${tabName}", currentCaseName=null`);
+
                     await this._navigateToTab(tab);
                     await this.auth.safeWait(1000);
 
-                    // 🔥 清除上下文，避免影响后续子用例
-                    this.test.currentTabName = null;
-                    this.test.currentCaseName = null;
+                    // 🔥 保持 Tab 上下文，不要清除！这样子用例才能正确关联到父页面
+                    // 子用例执行时会设置 currentCaseName，执行完后会清除
                 } catch (e) {
                     console.log(`   ⚠️ 进入 ${tabName} 失败: ${e.message}`);
                     // 清除上下文
@@ -562,6 +628,7 @@ export class testModule {
                         // 🔥 设置当前用例上下文
                         this.test.currentTabName = tabName;
                         this.test.currentCaseName = testCase.name;
+                        console.log(`      🔍 设置用例上下文: currentTabName="${tabName}", currentCaseName="${testCase.name}"`);
 
                         // 执行用例
                         await Promise.race([
@@ -571,10 +638,6 @@ export class testModule {
                             )
                         ]);
 
-                        // 🔥 清除用例上下文
-                        this.test.currentTabName = null;
-                        this.test.currentCaseName = null;
-
                         const duration = Date.now() - startTime;
                         console.log(`      ✅ 通过 (${duration}ms${attempt > 1 ? `, 第${attempt}次` : ''})`);
                         this._recordResult(testCase.name, 'passed', duration, null, attempt);
@@ -582,8 +645,17 @@ export class testModule {
 
                         // 🔥 新增：子用例执行完成后返回父用例界面
                         if (tab) {
+                            // 🔥 在返回前，先恢复父页面上下文（清除子用例名称）
+                            this.test.currentTabName = tabName;
+                            this.test.currentCaseName = null; // 返回父页面，清除子用例名称
+                            console.log(`      🔍 恢复父页面上下文: currentTabName="${tabName}", currentCaseName=null`);
+
                             await this._returnToParentTab(tab);
                         }
+
+                        // 🔥 修复：在返回父页面之后再清除用例上下文
+                        this.test.currentTabName = null;
+                        this.test.currentCaseName = null;
 
                         break;
 
@@ -618,6 +690,10 @@ export class testModule {
 
             // 离开当前目录
             await this._leaveTab(tab);
+
+            // 🔥 清除当前 Tab 上下文（所有子用例执行完毕）
+            this.test.currentTabName = null;
+            this.test.currentCaseName = null;
 
             // 回到首页准备进入下一个目录
             await this.auth._ensureOnHomePage().catch(() => { });
@@ -694,5 +770,62 @@ export class testModule {
             total: 0, passed: 0, failed: 0, skipped: 0,
             errors: [], timeline: []
         };
+    }
+
+    /**
+     * 🔥 新增：关闭所有遮罩层
+     */
+    async _dismissAllOverlays() {
+        try {
+            // 尝试关闭各种可能的遮罩
+            const overlaySelectors = [
+                '.close-btn',
+                '.overlay-close',
+                '.modal-close',
+                '.popup-close',
+                '[data-testid="close"]',
+                '.van-overlay',
+                '.mask'
+            ];
+
+            for (const selector of overlaySelectors) {
+                const overlay = this.page.locator(selector).first();
+                const visible = await overlay.isVisible({ timeout: 500 }).catch(() => false);
+                if (visible) {
+                    await overlay.click();
+                    console.log(`      ✓ 关闭遮罩: ${selector}`);
+                    await this.auth.safeWait(500);
+                }
+            }
+        } catch (e) {
+            // 忽略错误
+        }
+    }
+
+    /**
+     * 🔥 新增：点击 Tab 并等待
+     * @param {object} tab - tab 配置
+     */
+    async _clickAndWaitTab(tab) {
+        // 先清除可能残留的遮罩
+        await this._dismissAllOverlays().catch(() => { });
+
+        // 点击 tab
+        await this.page.locator(tab.selector).click({ timeout: 10000 });
+
+        // 根据配置等待
+        if (tab.switchPage) {
+            await this.test.switchToPage(tab.pageName, {
+                waitForSelector: tab.waitForSelector,
+                waitTime: tab.waitTime,
+                collectPreviousPage: tab.collectPreviousPage
+            });
+        } else {
+            if (tab.waitForSelector) {
+                await this.page.waitForSelector(tab.waitForSelector, { timeout: 10000 })
+                    .catch(() => { });
+            }
+            await this.auth.safeWait(tab.waitTime || 500);
+        }
     }
 }

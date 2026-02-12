@@ -31,6 +31,9 @@ export async function tarbarComponentsRegester(test) {
         runner.registerTab('新版返佣', {
             selector: '#promotion',
             pageName: '新版返佣',
+            // 🔥 修复：使用更通用的选择器来验证是否在父页面
+            // 父页面有 "My Rewards" 和 "Invite Rewards" 两个 tab
+            // 使用 "My Rewards" 作为主要验证，因为它是默认显示的 tab
             waitForSelector: 'text=My Rewards',
             waitTime: 1000,
             collectPreviousPage: true

@@ -80,34 +80,123 @@ export class PageManager {
       // 2. 等待新页面稳定
       await this.waitForPageReady(options);
 
-      // 3. 重置性能监控 + 记录切换时间
+      // 🔥 3. 等待 LCP 完成或超时 3 秒（使用 TestCase 的方法）
+      await this.t.waitForPageReady(3000);
+
+      // 🔥 4. 等待 URL 更新（给 SPA 路由一些时间）
+      await this.page.waitForTimeout(300);
+
+      // 🔥 5. 立即获取当前 URL
+      const currentUrl = this.page.url();
+      console.log(`      🔗 即将记录路由: ${currentUrl}`);
+
+      // 6. 重置性能监控 + 记录切换时间
       await this.t.performanceMonitor.reset();
 
-      // 4. 创建新页面记录
-      this.t.createPageRecord(pageName);
+      // 🔥 7. 创建新页面记录（每次都创建，传入当前 URL）
+      this.t.createPageRecord(pageName, currentUrl);
 
-      // 5. 重新初始化性能监控（复用 CDP Session）
+      // 8. 重新初始化性能监控（复用 CDP Session）
       await this.t.performanceMonitor.start();
       await this.t.performanceMonitor.injectWebVitals();
 
-      // 6. 短暂等待让性能数据稳定（不影响采集）
+      // 9. 短暂等待让性能数据稳定（不影响采集）
       if (waitTime > 0) {
         await this.page.waitForTimeout(waitTime);
       }
 
-      // 7. 标记采集起点
+      // 10. 标记采集起点
       await this.t.performanceMonitor.markCollectStart();
 
-      // 8. 截图
+      // 11. 截图
       if (takeScreenshot) {
         await this.takePageScreenshot(pageName, 'loaded');
+      }
+
+      // 🔥 12. 再次确认 URL（防止 SPA 延迟更新）
+      if (this.t.currentPageRecord) {
+        const finalUrl = this.page.url();
+        if (finalUrl !== currentUrl) {
+          console.log(`      🔗 URL 已更新: ${currentUrl} → ${finalUrl}`);
+          this.t.currentPageRecord.url = finalUrl;
+        }
       }
 
       console.log(`      ✓ 已进入: ${pageName}`);
       return true; // 成功返回 true
     } catch (error) {
       console.error(`      ❌ 页面切换失败: ${error.message}`);
+
+      // 🔥 标记测试失败并截图
+      this.t.markPageTestFailed(`页面切换失败: ${error.message}`);
+      await this.t.captureErrorScreenshot(`switchTo-${pageName}-failed`);
+
       return false; // 失败返回 false
+    }
+  }
+
+  /**
+   * 🔥 等待页面最大内容绘制完成（LCP）
+   * @param {number} maxWait - 最大等待时间（毫秒）
+   */
+  async waitForLCP(maxWait = 3000) {
+    try {
+      console.log(`      ⏳ 等待页面最大内容绘制完成（最多 ${maxWait}ms）...`);
+
+      const startTime = Date.now();
+
+      // 等待 LCP 事件
+      const lcpResult = await this.page.evaluate(() => {
+        return new Promise((resolve) => {
+          if ('PerformanceObserver' in window) {
+            try {
+              const observer = new PerformanceObserver((list) => {
+                const entries = list.getEntries();
+                const lastEntry = entries[entries.length - 1];
+                if (lastEntry) {
+                  resolve({
+                    lcp: lastEntry.renderTime || lastEntry.loadTime,
+                    element: lastEntry.element?.tagName || 'unknown'
+                  });
+                }
+              });
+              observer.observe({ type: 'largest-contentful-paint', buffered: true });
+
+              // 超时自动停止
+              setTimeout(() => {
+                observer.disconnect();
+                resolve(null);
+              }, 5000);
+            } catch (e) {
+              resolve(null);
+            }
+          } else {
+            resolve(null);
+          }
+        });
+      }).catch(() => null);
+
+      // 等待 LCP 或超时
+      const result = await Promise.race([
+        Promise.resolve(lcpResult),
+        new Promise(resolve => setTimeout(() => resolve(null), maxWait))
+      ]);
+
+      const elapsed = Date.now() - startTime;
+
+      if (result && result.lcp) {
+        console.log(`      ✅ LCP 完成: ${Math.round(result.lcp)}ms (元素: ${result.element})`);
+      } else {
+        console.log(`      ⏱️ LCP 超时，已等待 ${elapsed}ms，继续执行`);
+      }
+
+      // 额外等待确保渲染稳定
+      await this.page.waitForTimeout(300);
+
+    } catch (e) {
+      console.log(`      ⚠️ 等待 LCP 出错: ${e.message}，继续执行`);
+      // 出错时至少等待 1 秒
+      await this.page.waitForTimeout(1000);
     }
   }
 
@@ -154,6 +243,7 @@ export class PageManager {
     console.log(`\n      📊 完成页面采集: ${pageName}`);
 
     this.t.currentPageRecord.endTime = new Date().toISOString();
+    // 🔥 修复：记录当前真实的 URL
     this.t.currentPageRecord.url = this.page.url();
 
     try {

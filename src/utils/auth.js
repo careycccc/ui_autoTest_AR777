@@ -22,6 +22,131 @@ export class AuthHelper {
         }
     }
 
+    /**
+     * 🔥 等待页面最大内容绘制完成（LCP）或超时
+     * 确保页面主要内容已加载完成再进行操作
+     * @param {number} maxWait - 最大等待时间（毫秒），默认 3000ms
+     * @returns {Promise<boolean>} 是否成功等待到 LCP
+     */
+    async waitForLCP(maxWait = 3000) {
+        try {
+            if (!this.page || this.page.isClosed()) return false;
+
+            console.log(`        ⏳ 等待页面最大内容绘制完成（最多 ${maxWait}ms）...`);
+
+            const startTime = Date.now();
+            let lcpDetected = false;
+
+            // 尝试等待 LCP 事件
+            const lcpPromise = this.page.evaluate(() => {
+                return new Promise((resolve) => {
+                    // 使用 PerformanceObserver 监听 LCP
+                    if ('PerformanceObserver' in window) {
+                        try {
+                            const observer = new PerformanceObserver((list) => {
+                                const entries = list.getEntries();
+                                const lastEntry = entries[entries.length - 1];
+                                if (lastEntry) {
+                                    resolve({
+                                        lcp: lastEntry.renderTime || lastEntry.loadTime,
+                                        element: lastEntry.element?.tagName || 'unknown'
+                                    });
+                                }
+                            });
+                            observer.observe({ type: 'largest-contentful-paint', buffered: true });
+
+                            // 5秒后自动停止观察
+                            setTimeout(() => {
+                                observer.disconnect();
+                                resolve(null);
+                            }, 5000);
+                        } catch (e) {
+                            resolve(null);
+                        }
+                    } else {
+                        resolve(null);
+                    }
+                });
+            });
+
+            // 等待 LCP 或超时
+            const result = await Promise.race([
+                lcpPromise,
+                new Promise(resolve => setTimeout(() => resolve(null), maxWait))
+            ]);
+
+            const elapsed = Date.now() - startTime;
+
+            if (result && result.lcp) {
+                lcpDetected = true;
+                console.log(`        ✅ LCP 完成: ${Math.round(result.lcp)}ms (元素: ${result.element})`);
+            } else {
+                console.log(`        ⏱️ LCP 超时，已等待 ${elapsed}ms，继续执行`);
+            }
+
+            // 额外等待一小段时间确保渲染稳定
+            await this.safeWait(300);
+
+            return lcpDetected;
+
+        } catch (e) {
+            console.log(`        ⚠️ 等待 LCP 出错: ${e.message}，继续执行`);
+            // 出错时至少等待 1 秒
+            await this.safeWait(1000);
+            return false;
+        }
+    }
+
+    /**
+     * 🔥 等待页面稳定（综合等待策略）
+     * 结合 LCP、网络空闲、DOM 稳定等多个指标
+     * @param {object} options - 配置选项
+     * @param {number} options.maxWait - 最大等待时间，默认 3000ms
+     * @param {boolean} options.waitForNetwork - 是否等待网络空闲，默认 false
+     * @param {boolean} options.waitForLCP - 是否等待 LCP，默认 true
+     * @returns {Promise<void>}
+     */
+    async waitForPageStable(options = {}) {
+        const {
+            maxWait = 3000,
+            waitForNetwork = false,
+            waitForLCP = true
+        } = options;
+
+        try {
+            if (!this.page || this.page.isClosed()) return;
+
+            console.log(`        🔄 等待页面稳定...`);
+
+            // 1. 等待 DOM 加载完成
+            await this.page.waitForLoadState('domcontentloaded', { timeout: maxWait }).catch(() => {
+                console.log(`        ⚠️ DOM 加载超时`);
+            });
+
+            // 2. 等待 LCP（如果启用）
+            if (waitForLCP) {
+                await this.waitForLCP(maxWait);
+            }
+
+            // 3. 等待网络空闲（如果启用）
+            if (waitForNetwork) {
+                await this.page.waitForLoadState('networkidle', { timeout: maxWait }).catch(() => {
+                    console.log(`        ⚠️ 网络空闲超时`);
+                });
+            }
+
+            // 4. 额外等待确保渲染完成
+            await this.safeWait(500);
+
+            console.log(`        ✅ 页面已稳定`);
+
+        } catch (e) {
+            console.log(`        ⚠️ 等待页面稳定出错: ${e.message}`);
+            // 出错时至少等待 1 秒
+            await this.safeWait(1000);
+        }
+    }
+
     async dismissOverlay(options = {}) {
         const {
             x = 30,
@@ -60,6 +185,9 @@ export class AuthHelper {
             '.van-nav-bar__left',       // vant 组件库
             '.navbar-back',
             'header .left',              // 通用 header 左侧
+            '.van-icon-arrow-left',      // vant 左箭头图标
+            '[class*="arrow-left"]',     // 包含 arrow-left 的类名
+            '[class*="back"]',           // 包含 back 的类名
         ];
 
         for (const selector of backSelectors) {
@@ -236,37 +364,8 @@ export class AuthHelper {
             // 处理首页的认证弹窗
             await this.handlePopups();
 
-            // 处理首页的登录前弹窗（.dialog-body）
-            try {
-                const dialogBody = this.page.locator('.dialog-body');
-                const isDialog = await dialogBody.isVisible({ timeout: 2000 }).catch(() => false);
-
-                if (isDialog) {
-                    console.log('        ℹ️ 检测到 .dialog-body 弹窗');
-
-                    // 尝试多种关闭方式
-                    const closeSelectors = ['.close', '.dialog-close', 'button:has-text("Close")', '[aria-label="Close"]'];
-
-                    for (const selector of closeSelectors) {
-                        try {
-                            const closeBtn = this.page.locator(selector).first();
-                            const isVisible = await closeBtn.isVisible({ timeout: 1000 }).catch(() => false);
-
-                            if (isVisible) {
-                                await closeBtn.click({ timeout: 3000 });
-                                console.log(`        ✓ 关闭弹窗: ${selector}`);
-                                await this.page.waitForTimeout(500);
-                                break;
-                            }
-                        } catch (e) {
-                            // 继续尝试下一个选择器
-                        }
-                    }
-                }
-            } catch (error) {
-                console.log(`      ⚠️ 登录前弹窗处理失败: ${error.message}`);
-                // 不抛出错误，继续执行
-            }
+            // 处理首页的登录前弹窗（.dialog-content）
+            await this.handleDialogContent();
 
             await this.t.step('点击 Login 按钮', async () => {
                 try {
@@ -556,6 +655,65 @@ export class AuthHelper {
                 }
             }
         });
+    }
+
+    /**
+     * 处理 .dialog-content 弹窗
+     * 检测到 .dialog-content 后，点击其下的 .close.close2 按钮
+     */
+    async handleDialogContent() {
+        try {
+            // 检测 .dialog-content 是否存在
+            const dialogContent = this.page.locator('.dialog-content');
+            const isVisible = await dialogContent.isVisible({ timeout: 2000 }).catch(() => false);
+
+            if (!isVisible) {
+                return; // 没有弹窗，直接返回
+            }
+
+            console.log('        ℹ️ 检测到 .dialog-content 弹窗');
+
+            // 尝试点击 .close.close2 按钮（优先）
+            const closeBtn = this.page.locator('.close.close2');
+            const closeBtnVisible = await closeBtn.isVisible({ timeout: 1000 }).catch(() => false);
+
+            if (closeBtnVisible) {
+                await closeBtn.click({ timeout: 3000 });
+                console.log('        ✓ 关闭弹窗: .close.close2');
+                await this.page.waitForTimeout(500);
+                return;
+            }
+
+            // 备用方案：尝试其他关闭按钮
+            const fallbackSelectors = [
+                '.dialog-content .close',
+                '.dialog-content .ar_icon.close',
+                '.dialog-content [aria-label="Close"]',
+                '.dialog-footer button'
+            ];
+
+            for (const selector of fallbackSelectors) {
+                try {
+                    const btn = this.page.locator(selector).first();
+                    const visible = await btn.isVisible({ timeout: 1000 }).catch(() => false);
+
+                    if (visible) {
+                        await btn.click({ timeout: 3000 });
+                        console.log(`        ✓ 关闭弹窗: ${selector}`);
+                        await this.page.waitForTimeout(500);
+                        return;
+                    }
+                } catch (e) {
+                    // 继续尝试下一个
+                }
+            }
+
+            console.log('        ⚠️ 未找到可用的关闭按钮');
+
+        } catch (error) {
+            console.log(`        ⚠️ 处理 .dialog-content 弹窗失败: ${error.message}`);
+            // 不抛出错误，继续执行
+        }
     }
 
     // ========================================

@@ -13,7 +13,10 @@ export {
 // 邀请相关功能
 export {
     earnInviteLink,
-    earnInviteRewardsRankInfo
+    earnInviteRewardsRankInfo,
+    earnRankToRewards,
+    earnRankToInvitees,
+    earnInviteRewardsGoToAttend
 } from './earn-invite.js';
 
 // 排行榜奖励相关功能

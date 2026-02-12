@@ -3,10 +3,18 @@
  * @param {Page} page - Playwright 页面对象
  * @param {string} text - 要查找的文本
  * @param {object} options - 可选配置
- * @param {number} options.timeout - 等待超时时间（毫秒），默认 5000
+ * @param {number} options.timeout - 等待超时时间（毫秒），默认 3000
  * @param {boolean} options.exact - 是否精确匹配文本，默认 false
  * @param {string} options.name - 描述文本位置
  * @param {number} options.waitAfter - 点击后等待时间（毫秒），默认 1000
+ * @param {string} options.containerSelector - 父容器选择器，用于缩小查找范围
+ * @param {string} options.specificSelector - 特定选择器，优先使用
+ * @param {boolean} options.scrollIntoView - 是否滚动到元素可见位置，默认 true
+ * @param {boolean} options.force - 是否强制点击，默认 false
+ * @param {boolean} options.waitForStable - 点击前是否等待页面稳定，默认 true
+ * @param {number} options.stableTimeout - 页面稳定等待超时时间，默认 3000ms
+ * @param {Object} options.test - TestCase 实例，用于错误截图
+ * @param {boolean} options.throwOnNotFound - 元素不可见时是否抛出错误，默认 false
  * @returns {Promise<boolean>} 返回是否成功点击
  */
 export async function clickIfTextExists(page, text, options = {}) {
@@ -15,6 +23,14 @@ export async function clickIfTextExists(page, text, options = {}) {
         exact = false,
         name = '未命名',
         waitAfter = 1000,
+        containerSelector = null,
+        specificSelector = null,
+        scrollIntoView = true,
+        force = false,
+        waitForStable = true,
+        stableTimeout = 3000,
+        test = null,
+        throwOnNotFound = false
     } = options;
 
     try {
@@ -24,20 +40,60 @@ export async function clickIfTextExists(page, text, options = {}) {
             return false;
         }
 
-        const locator = exact
-            ? page.getByText(text, { exact: true })
-            : page.getByText(text);
+        // 🔥 等待页面稳定（LCP 完成）
+        if (waitForStable) {
+            await waitForPageStableHelper(page, stableTimeout);
+        }
+
+        let locator;
+
+        // 优先使用特定选择器
+        if (specificSelector) {
+            locator = page.locator(specificSelector);
+        } else if (containerSelector) {
+            // 在指定容器内查找
+            const container = page.locator(containerSelector);
+            locator = exact
+                ? container.getByText(text, { exact: true })
+                : container.getByText(text);
+        } else {
+            // 全局查找
+            locator = exact
+                ? page.getByText(text, { exact: true })
+                : page.getByText(text);
+        }
 
         // 检查元素是否可见
         const isVisible = await locator.isVisible({ timeout }).catch(() => false);
 
         if (!isVisible) {
-            console.log(`        ℹ️ ${name} - 文本 "${text}" 不存在或不可见`);
+            const errorMsg = `${name} - 文本 "${text}" 在 ${timeout}ms 后仍不可见`;
+            console.log(`        ❌ ${errorMsg}`);
+
+            // 🔥 如果提供了 test 实例，标记失败并截图
+            if (test) {
+                test.markPageTestFailed(errorMsg);
+                await test.captureErrorScreenshot(`element-not-visible-${text}`);
+            }
+
+            // 🔥 如果设置了抛出错误，则抛出
+            if (throwOnNotFound) {
+                throw new Error(errorMsg);
+            }
+
             return false;
         }
 
-        // 等待元素稳定后再点击
-        await locator.click({ timeout: 5000, force: false });
+        // 滚动到元素可见位置
+        if (scrollIntoView) {
+            await locator.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {
+                console.log(`        ⚠️ ${name} - 滚动到 "${text}" 失败，继续尝试点击`);
+            });
+            await page.waitForTimeout(300);
+        }
+
+        // 点击元素
+        await locator.click({ timeout: 5000, force });
         console.log(`        ✓ ${name} - 已点击 "${text}"`);
 
         // 点击后等待
@@ -47,8 +103,70 @@ export async function clickIfTextExists(page, text, options = {}) {
 
         return true;
     } catch (error) {
-        console.log(`        ❌ ${name} - 点击文本 "${text}" 时出错: ${error.message}`);
+        const errorMsg = `${name} - 点击文本 "${text}" 时出错: ${error.message}`;
+        console.log(`        ❌ ${errorMsg}`);
+
+        // 🔥 如果提供了 test 实例，标记失败并截图
+        if (test) {
+            test.markPageTestFailed(errorMsg);
+            await test.captureErrorScreenshot(`click-error-${text}`);
+        }
+
+        // 🔥 如果设置了抛出错误，则抛出
+        if (throwOnNotFound) {
+            throw error;
+        }
+
         return false;
+    }
+}
+
+/**
+ * 🔥 辅助函数：等待页面稳定
+ * @param {Page} page - Playwright 页面对象
+ * @param {number} maxWait - 最大等待时间
+ */
+async function waitForPageStableHelper(page, maxWait = 3000) {
+    try {
+        // 等待 DOM 加载
+        await page.waitForLoadState('domcontentloaded', { timeout: maxWait }).catch(() => { });
+
+        // 等待 LCP
+        const lcpResult = await page.evaluate(() => {
+            return new Promise((resolve) => {
+                if ('PerformanceObserver' in window) {
+                    try {
+                        const observer = new PerformanceObserver((list) => {
+                            const entries = list.getEntries();
+                            const lastEntry = entries[entries.length - 1];
+                            if (lastEntry) {
+                                resolve(lastEntry.renderTime || lastEntry.loadTime);
+                            }
+                        });
+                        observer.observe({ type: 'largest-contentful-paint', buffered: true });
+                        setTimeout(() => {
+                            observer.disconnect();
+                            resolve(null);
+                        }, 2000);
+                    } catch (e) {
+                        resolve(null);
+                    }
+                } else {
+                    resolve(null);
+                }
+            });
+        }).catch(() => null);
+
+        if (lcpResult) {
+            console.log(`        ✅ LCP: ${Math.round(lcpResult)}ms`);
+        }
+
+        // 额外等待确保稳定
+        await page.waitForTimeout(300);
+
+    } catch (e) {
+        // 出错时至少等待 1 秒
+        await page.waitForTimeout(1000);
     }
 }
 
@@ -542,4 +660,98 @@ export async function scrollToLoadAll(page, containerSelector, itemSelector, thr
 
     const finalCount = await container.locator(itemSelector).count();
     console.log(`✅ 滑动完成，最终 item 数量: ${finalCount}`);
+}
+
+
+/**
+ * 页面滑动函数 - 模拟手指滑动操作
+ * @param {Page} page - Playwright page 对象
+ * @param {Object} options - 滑动配置选项
+ * @param {string} options.direction - 滑动方向: 'up'(向上), 'down'(向下), 'left'(向左), 'right'(向右)
+ * @param {number} options.distance - 滑动距离比例 (0-1)，默认 0.5 (滑动视口的一半距离)
+ * @param {number} options.startRatio - 起始位置比例 (0-1)，默认根据方向自动计算
+ * @param {number} options.duration - 滑动持续时间（毫秒），默认 300
+ * @param {number} options.steps - 滑动步数，默认 10（越大越平滑）
+ * @param {number} options.waitAfter - 滑动后等待时间（毫秒），默认 500
+ * @returns {Promise<void>}
+ * 
+ * @example
+ * // 向上滑动半屏（默认）
+ * await swipePage(page, { direction: 'up' });
+ * 
+ * // 向上滑动 70% 的距离
+ * await swipePage(page, { direction: 'up', distance: 0.7 });
+ * 
+ * // 从屏幕 80% 位置向上滑动到 20% 位置
+ * await swipePage(page, { direction: 'up', startRatio: 0.8, distance: 0.6 });
+ * 
+ * // 向下滑动
+ * await swipePage(page, { direction: 'down' });
+ * 
+ * // 向左滑动（轮播图）
+ * await swipePage(page, { direction: 'left' });
+ */
+export async function swipePage(page, options = {}) {
+    const {
+        direction = 'up',
+        distance = 0.5,
+        startRatio = null,
+        duration = 300,
+        steps = 10,
+        waitAfter = 500
+    } = options;
+
+    // 获取视口大小
+    const viewportSize = page.viewportSize();
+    const width = viewportSize.width;
+    const height = viewportSize.height;
+
+    let startX, startY, endX, endY;
+
+    // 根据方向计算起始和结束位置
+    switch (direction) {
+        case 'up': // 向上滑动（手指从下往上）
+            startX = width / 2;
+            endX = width / 2;
+            startY = startRatio !== null ? height * startRatio : height * (0.5 + distance / 2);
+            endY = startY - height * distance;
+            break;
+
+        case 'down': // 向下滑动（手指从上往下）
+            startX = width / 2;
+            endX = width / 2;
+            startY = startRatio !== null ? height * startRatio : height * (0.5 - distance / 2);
+            endY = startY + height * distance;
+            break;
+
+        case 'left': // 向左滑动（手指从右往左）
+            startY = height / 2;
+            endY = height / 2;
+            startX = startRatio !== null ? width * startRatio : width * (0.5 + distance / 2);
+            endX = startX - width * distance;
+            break;
+
+        case 'right': // 向右滑动（手指从左往右）
+            startY = height / 2;
+            endY = height / 2;
+            startX = startRatio !== null ? width * startRatio : width * (0.5 - distance / 2);
+            endX = startX + width * distance;
+            break;
+
+        default:
+            throw new Error(`不支持的滑动方向: ${direction}。支持的方向: up, down, left, right`);
+    }
+
+    // 执行滑动
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(endX, endY, { steps });
+    await page.mouse.up();
+
+    // 等待页面稳定
+    if (waitAfter > 0) {
+        await page.waitForTimeout(waitAfter);
+    }
+
+    console.log(`        ✓ 已${direction === 'up' ? '向上' : direction === 'down' ? '向下' : direction === 'left' ? '向左' : '向右'}滑动页面 (距离: ${Math.round(distance * 100)}%)`);
 }
