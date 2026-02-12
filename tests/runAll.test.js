@@ -34,7 +34,8 @@ export default async function (test) {
         // ========================================
         const results = await runner.runSequential({
             // 按这个顺序执行
-            tabOrder: ['活动资讯', '新版返佣', '菜单', '邀请转盘', '家'],
+            // tabOrder: ['活动资讯', '新版返佣', '菜单', '邀请转盘', '家'],
+            tabOrder: ['活动资讯', '菜单', '邀请转盘', '家'],
             defaultRetries: 3,              // 默认重试次数
             retryDelay: 2000,               // 重试间隔(ms)
             resetBeforeEachCase: true,      // 每个用例前是否回到当前目录页

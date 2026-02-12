@@ -1,3 +1,6 @@
+import { turntablePlay } from '../turntable/turntable-index.js';
+
+
 /**
  * 邀请转盘 - 子用例模块
  */
@@ -13,4 +16,7 @@ export function registerTurntableCases(runner) {
     // runner.registerCase('邀请转盘', '检查转盘功能', async (page, auth, test) => {
     //     // 测试逻辑
     // });
+    runner.registerCase('邀请转盘', '邀请转盘->转盘功能', async (page, auth, test) => {
+        await turntablePlay(page, test);
+    });
 }
