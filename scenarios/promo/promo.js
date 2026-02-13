@@ -23,7 +23,7 @@ export async function verifyActivelist(page, auth, test) {
     if (count === 0) {
         throw new Error('活动列表为空');
     }
-
+    //await page.pause();
     console.log(`      ✅ 活动列表有 ${count} 个活动`);
 }
 

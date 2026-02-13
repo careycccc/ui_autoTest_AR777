@@ -113,12 +113,17 @@ export class PageManager {
         await this.takePageScreenshot(pageName, 'loaded');
       }
 
-      // 🔥 12. 再次确认 URL（防止 SPA 延迟更新）
+      // 🔥 12. 再次确认 URL（防止 SPA 延迟更新或自动跳转）
       if (this.t.currentPageRecord) {
         const finalUrl = this.page.url();
         if (finalUrl !== currentUrl) {
           console.log(`      🔗 URL 已更新: ${currentUrl} → ${finalUrl}`);
           this.t.currentPageRecord.url = finalUrl;
+        }
+
+        // 🔥 验证 URL 是否符合预期（如果提供了 waitForUrl）
+        if (waitForUrl && !finalUrl.includes(waitForUrl)) {
+          throw new Error(`页面跳转失败: 期望 URL 包含 "${waitForUrl}", 实际为 "${finalUrl}"`);
         }
       }
 
@@ -210,13 +215,27 @@ export class PageManager {
         await this.page.waitForSelector(waitForSelector, { timeout: 5000 });
       } catch (e) {
         console.warn(`      ⚠️ 等待元素超时: ${waitForSelector}`);
+        // 🔥 检查 URL 是否还在预期的页面
+        const currentUrl = this.page.url();
+        console.log(`      🔍 当前 URL: ${currentUrl}`);
+
+        // 如果 URL 已经变化（可能自动跳转了），抛出错误
+        if (waitForUrl && !currentUrl.includes(waitForUrl)) {
+          throw new Error(`页面已跳转到其他地址: ${currentUrl}`);
+        }
       }
     }
 
     if (waitForUrl) {
       try {
-        console.log(`      ⏳ 等待URL: ${waitForUrl}`);
-        await this.page.waitForURL(waitForUrl, { timeout: 15000 });
+        const currentUrl = this.page.url();
+        // 🔥 如果当前 URL 已经匹配，就不需要等待
+        if (currentUrl.includes(waitForUrl)) {
+          console.log(`      ✅ URL 已匹配: ${waitForUrl}`);
+        } else {
+          console.log(`      ⏳ 等待URL: ${waitForUrl}`);
+          await this.page.waitForURL(url => url.includes(waitForUrl), { timeout: 15000 });
+        }
       } catch (e) {
         console.warn(`      ⚠️ 等待URL超时`);
       }
@@ -243,12 +262,12 @@ export class PageManager {
     console.log(`\n      📊 完成页面采集: ${pageName}`);
 
     this.t.currentPageRecord.endTime = new Date().toISOString();
-    // 🔥 修复：记录当前真实的 URL
-    this.t.currentPageRecord.url = this.page.url();
+    // 🔥 不要覆盖 URL！保持创建时记录的 URL
+    // this.t.currentPageRecord.url = this.page.url(); // ❌ 删除这行
 
     try {
       const perfData = await this.t.performanceMonitor.collect();
-      perfData.url = this.t.currentPageRecord.url;
+      perfData.url = this.t.currentPageRecord.url; // 使用记录的 URL，不是当前 URL
       perfData.device = this.t.currentDevice?.name || 'Desktop';
       perfData.pageName = pageName;
 

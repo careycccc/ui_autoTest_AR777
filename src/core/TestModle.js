@@ -116,38 +116,116 @@ export class testModule {
     /**
      * 🔥 导航到指定 Tab —— 自动判断使用 switchToPage 还是纯点击
      * @param {object} tab - 已注册的 tab 配置
+     * @param {number} maxRetries - 最大重试次数（默认3次，某些场景可传入1次）
      */
-    async _navigateToTab(tab) {
+    async _navigateToTab(tab, maxRetries = 3) {
         console.log(`   🔍 [_navigateToTab] 开始导航到: ${tab.name}`);
         console.log(`   🔍 [_navigateToTab] 当前上下文 - currentTabName: "${this.test.currentTabName}", currentCaseName: "${this.test.currentCaseName}"`);
 
-        // Step 1: 点击选择器
-        await this.page.locator(tab.selector).click({ timeout: 10000 });
+        let lastError = null;
 
-        // Step 2: 根据 switchPage 决定导航方式
-        if (tab.switchPage) {
-            // ✅ 切换页面模式：使用 test.switchToPage()
-            console.log(`   🔍 [_navigateToTab] 即将调用 switchToPage，pageName: "${tab.pageName}"`);
-            await this.test.switchToPage(tab.pageName, {
-                waitForSelector: tab.waitForSelector,
-                waitTime: tab.waitTime,
-                collectPreviousPage: tab.collectPreviousPage
-            });
-        } else {
-            // ✅ 仅点击模式：手动等待元素
-            if (tab.waitForSelector) {
-                await this.page.waitForSelector(tab.waitForSelector, { timeout: 10000 })
-                    .catch(() => console.log(`      ⚠️ 等待 ${tab.waitForSelector} 超时`));
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`   🔄 第 ${attempt} 次尝试导航到: ${tab.name}`);
+
+                // Step 1: 点击选择器
+                const beforeUrl = this.page.url();
+                console.log(`   📍 点击前 URL: ${beforeUrl}`);
+
+                // 🔥 确保元素可见且可交互
+                const element = this.page.locator(tab.selector);
+                await element.waitFor({ state: 'visible', timeout: 10000 });
+                await element.scrollIntoViewIfNeeded();
+                await this.page.waitForTimeout(300);
+
+                await element.click({ timeout: 10000 });
+                console.log(`   ✅ 已点击: ${tab.selector}`);
+
+                // 🔥 等待 URL 变化
+                await this.page.waitForTimeout(1500);
+                const afterUrl = this.page.url();
+
+                if (beforeUrl !== afterUrl) {
+                    console.log(`   ✅ URL 已变化: ${beforeUrl} → ${afterUrl}`);
+                } else {
+                    console.log(`   ⚠️ URL 未变化，仍为: ${afterUrl}`);
+                }
+
+                // 🔥 再次确认 URL 是否稳定
+                await this.page.waitForTimeout(1000);
+                const finalUrl = this.page.url();
+                if (finalUrl !== afterUrl) {
+                    console.log(`   ⚠️ URL 再次变化: ${afterUrl} → ${finalUrl}`);
+                }
+
+                // Step 2: 根据 switchPage 决定导航方式
+                if (tab.switchPage) {
+                    console.log(`   🔍 [_navigateToTab] 即将调用 switchToPage，pageName: "${tab.pageName}"`);
+                    const switchSuccess = await this.test.switchToPage(tab.pageName, {
+                        waitForSelector: tab.waitForSelector,
+                        waitForUrl: tab.waitForUrl,
+                        waitTime: tab.waitTime,
+                        collectPreviousPage: tab.collectPreviousPage
+                    });
+
+                    if (!switchSuccess) {
+                        throw new Error('switchToPage 返回 false');
+                    }
+                } else {
+                    if (tab.waitForSelector) {
+                        await this.page.waitForSelector(tab.waitForSelector, { timeout: 10000 })
+                            .catch(() => console.log(`      ⚠️ 等待 ${tab.waitForSelector} 超时`));
+                    }
+                    await this.auth.safeWait(tab.waitTime || 500);
+                }
+
+                // Step 3: 执行进入后的回调
+                if (tab.onEnter) {
+                    await tab.onEnter(this.page, this.auth, this.test);
+                }
+
+                // 🔥 最终验证：检查是否真的在目标页面
+                if (tab.waitForSelector) {
+                    const isOnTargetPage = await this.page.locator(tab.waitForSelector)
+                        .isVisible({ timeout: 3000 })
+                        .catch(() => false);
+
+                    if (!isOnTargetPage) {
+                        throw new Error(`验证失败：未找到元素 "${tab.waitForSelector}"`);
+                    }
+                }
+
+                // � 验证 URL 是否正确
+                const currentUrl = this.page.url();
+                if (tab.waitForUrl && !currentUrl.includes(tab.waitForUrl)) {
+                    throw new Error(`URL 验证失败：期望包含 "${tab.waitForUrl}"，实际为 "${currentUrl}"`);
+                }
+
+                console.log(`   ✅ [_navigateToTab] 导航成功`);
+                return true;
+
+            } catch (error) {
+                lastError = error;
+                console.log(`   ❌ 第 ${attempt} 次尝试失败: ${error.message}`);
+
+                if (attempt < maxRetries) {
+                    console.log(`   🔄 等待 2 秒后重试...`);
+                    await this.page.waitForTimeout(2000);
+
+                    // 🔥 重试前先回到首页，确保状态干净
+                    try {
+                        await this.auth._ensureOnHomePage();
+                        await this.page.waitForTimeout(1000);
+                    } catch (e) {
+                        console.log(`   ⚠️ 回到首页失败: ${e.message}`);
+                    }
+                }
             }
-            await this.auth.safeWait(tab.waitTime || 500);
         }
 
-        // Step 3: 执行进入后的回调
-        if (tab.onEnter) {
-            await tab.onEnter(this.page, this.auth, this.test);
-        }
-
-        console.log(`   🔍 [_navigateToTab] 导航完成`);
+        // 所有重试都失败
+        console.log(`   ❌ [_navigateToTab] 导航失败，已重试 ${maxRetries} 次`);
+        throw lastError || new Error(`导航到 ${tab.name} 失败`);
     }
 
     /**
@@ -250,6 +328,16 @@ export class testModule {
                             return true;
                         } else {
                             console.log(`      ⚠️ 验证选择器 "${tab.waitForSelector}" 不可见`);
+                            // 🔥 如果不在父用例页面，直接导航到父用例，不要继续点击返回
+                            console.log(`      🔄 不在父用例页面，直接导航到父用例`);
+                            try {
+                                await this._navigateToTab(tab);
+                                console.log(`      ✓ 导航成功`);
+                                return true;
+                            } catch (e) {
+                                console.log(`      ❌ 导航失败: ${e.message}`);
+                                // 继续下一次尝试
+                            }
                         }
                     }
                 }
@@ -560,6 +648,8 @@ export class testModule {
 
             // 🔥 使用统一导航进入主目录
             const tab = this.mainTabs[tabName];
+            let tabNavigationFailed = false;
+
             if (tab) {
                 try {
                     // 🔥 设置当前 Tab 上下文（用于父页面记录）
@@ -568,17 +658,36 @@ export class testModule {
 
                     console.log(`   🔍 设置上下文: currentTabName="${tabName}", currentCaseName=null`);
 
-                    await this._navigateToTab(tab);
+                    // 🔥 对于转盘页面，只尝试1次（canvas加载失败重试无意义）
+                    const retries = tabName === '邀请转盘' ? 1 : 3;
+                    await this._navigateToTab(tab, retries);
                     await this.auth.safeWait(1000);
 
                     // 🔥 保持 Tab 上下文，不要清除！这样子用例才能正确关联到父页面
                     // 子用例执行时会设置 currentCaseName，执行完后会清除
                 } catch (e) {
                     console.log(`   ⚠️ 进入 ${tabName} 失败: ${e.message}`);
+                    tabNavigationFailed = true;
+
+                    // 🔥 记录所有子用例为跳过状态
+                    for (const testCase of cases) {
+                        caseIndex++;
+                        console.log(`\n   [${caseIndex}/${totalCases}] ⏭️ ${testCase.name} (父页面加载失败，跳过)`);
+                        this._recordResult(testCase.name, 'skipped', 0, e, 0);
+                    }
+
                     // 清除上下文
                     this.test.currentTabName = null;
                     this.test.currentCaseName = null;
+
+                    // 🔥 跳过该目录的所有子用例
+                    continue;
                 }
+            }
+
+            // 🔥 如果父页面导航失败，跳过所有子用例
+            if (tabNavigationFailed) {
+                continue;
             }
 
             // 执行该目录下的所有用例
@@ -695,8 +804,20 @@ export class testModule {
             this.test.currentTabName = null;
             this.test.currentCaseName = null;
 
-            // 回到首页准备进入下一个目录
-            await this.auth._ensureOnHomePage().catch(() => { });
+            // 🔥 修改：父用例执行完毕后停留在父用例页面，不返回首页
+            console.log(`      📍 父用例 "${tabName}" 执行完毕，停留在当前页面`);
+            console.log(`      🔗 当前 URL: ${this.page.url()}`);
+
+            // 🔥 检查并处理首页弹窗（如果当前在首页）
+            const currentUrl = this.page.url();
+            const urlPath = new URL(currentUrl).pathname;
+            const isOnHome = urlPath === '/' || urlPath === '';
+
+            if (isOnHome) {
+                console.log(`      📍 当前在首页，检查弹窗...`);
+                await this.auth.checkAndHandleHomePopups(20).catch(() => { });
+            }
+
             await this.auth.safeWait(1000);
         }
 

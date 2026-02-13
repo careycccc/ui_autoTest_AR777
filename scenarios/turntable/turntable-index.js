@@ -1,1 +1,2 @@
-export { turntablePlay } from '../turntable/turntable-play.js';
+export { turntablePlay } from './turntable-init.js';
+export { rotateTurntable, clickCashOut } from './turntable-rotate.js';

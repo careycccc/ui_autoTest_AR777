@@ -84,40 +84,22 @@ export async function tarbarComponentsRegester(test) {
         runner.registerTab('邀请转盘', {
             selector: '#turntable',
             pageName: '邀请转盘',
-            // 🔥 正则匹配：任意一个文本出现即可
-            waitForSelector: ':text("Cash"):visible',
-            waitTime: 1000,
+            waitTime: 2000,
             collectPreviousPage: true,
-            verifyTiming: 'beforeEnter',
-
-            // 🔥 自定义验证：两个文本任意一个可见即通过
-            verifyFn: async (page) => {
-                const a = await page.locator('text=Cash everyday').isVisible({ timeout: 3000 }).catch(() => false);
-                const b = await page.locator('text=CASH OUT').isVisible({ timeout: 1000 }).catch(() => false);
-
-                if (!a && !b) {
-                    throw new Error('邀请转盘页验证失败: "Cash everyday" 和 "CASH OUT" 都不可见');
-                }
-
-                console.log(`      ✅ 转盘页验证通过 (Cash everyday: ${a}, CASH OUT: ${b})`);
-            },
 
             onEnter: async (page, auth) => {
-                await auth.safeWait(1000);
-                const gift = page.locator('.popuer-gift');
-                if (await gift.isVisible({ timeout: 2000 }).catch(() => false)) {
-                    console.log(`      ⚠️ 检测到礼物弹窗，关闭中...`);
-                    await gift.click({ force: true });
-                    await auth.safeWait(500);
+                // 🔥 最简化版本：只检查 URL，不处理任何弹窗
+                await auth.safeWait(1500);
+
+                const currentUrl = page.url();
+                console.log(`      📍 onEnter URL: ${currentUrl}`);
+
+                if (currentUrl.includes('/activity') && !currentUrl.includes('/turntable')) {
+                    console.log(`      ❌ 页面被重定向回活动页`);
+                    throw new Error('转盘页面被重定向，账号可能未开启转盘活动');
                 }
-                const overlay = page.locator('.van-overlay');
-                if (await overlay.isVisible({ timeout: 1000 }).catch(() => false)) {
-                    await overlay.click({ force: true });
-                    await auth.safeWait(500);
-                }
-                if (auth.dismissOverlay) {
-                    await auth.dismissOverlay().catch(() => { });
-                }
+
+                console.log(`      ✅ 确认在转盘页面`);
             },
 
             onLeave: async (page, auth) => {

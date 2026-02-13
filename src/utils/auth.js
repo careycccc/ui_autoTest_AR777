@@ -175,6 +175,10 @@ export class AuthHelper {
      */
     async _clickBackButton() {
         const backSelectors = [
+            '.ar_icon.back.back',        // 🔥 精确匹配 Withdraw 页面的返回按钮
+            'span.ar_icon.back',         // 🔥 span 标签
+            '.ranking-header-left',      // 🔥 Rescue 页面的返回区域
+            '.van-nav-bar__left',        // 🔥 vant 组件库（Promotions 页面可能用这个）
             '.back-btn',
             '.nav-back',
             '[data-testid="back"]',
@@ -182,12 +186,12 @@ export class AuthHelper {
             '.go-back',
             '.arrow-left',
             '.icon-back',
-            '.van-nav-bar__left',       // vant 组件库
             '.navbar-back',
             'header .left',              // 通用 header 左侧
             '.van-icon-arrow-left',      // vant 左箭头图标
             '[class*="arrow-left"]',     // 包含 arrow-left 的类名
             '[class*="back"]',           // 包含 back 的类名
+            '[class*="header-left"]',    // 包含 header-left 的类名
         ];
 
         for (const selector of backSelectors) {
@@ -221,9 +225,40 @@ export class AuthHelper {
     async _detectCurrentPage() {
         const subPages = [
             {
+                name: 'Daily每日奖励页',
+                checks: [
+                    () => this.page.url().includes('/daily'),
+                    () => this.page.getByText('Daily deposit rewards').isVisible({ timeout: 500 }).catch(() => false),
+                ]
+            },
+            {
+                name: 'Promotions活动资讯页',
+                checks: [
+                    () => this.page.url().includes('/activity'),
+                    () => this.page.getByText('Promotions').isVisible({ timeout: 500 }).catch(() => false),
+                ]
+            },
+            {
+                name: 'Rescue页',
+                checks: [
+                    () => this.page.url().includes('/rescue'),
+                    () => this.page.locator('.ranking-header').isVisible({ timeout: 500 }).catch(() => false),
+                ]
+            },
+            {
+                name: 'Withdraw页',
+                checks: [
+                    () => this.page.url().includes('/withdraw'),
+                    () => this.page.getByText('Withdraw').isVisible({ timeout: 500 }).catch(() => false),
+                    () => this.page.getByText('Cash Balance').isVisible({ timeout: 500 }).catch(() => false),
+                ]
+            },
+            {
                 name: '邀请转盘页',
                 checks: [
-                    () => this.page.getByText('Cash everyday').isVisible({ timeout: 800 }).catch(() => false),
+                    // 🔥 优先通过 URL 判断
+                    () => this.page.url().includes('/turntable'),
+                    () => this.page.getByText('Invitation Wheel').isVisible({ timeout: 500 }).catch(() => false),
                     () => this.page.getByText('CASH OUT').isVisible({ timeout: 500 }).catch(() => false),
                 ]
             },
@@ -296,6 +331,8 @@ export class AuthHelper {
             const onHome = await this._isOnHomePage();
             if (onHome) {
                 console.log('        📍 已确认在首页');
+                // 🔥 回到首页后检查弹窗
+                await this.checkAndHandleHomePopups(20);
                 return true;
             }
 
@@ -313,6 +350,8 @@ export class AuthHelper {
                 const check = await this._isOnHomePage();
                 if (check) {
                     console.log('        ✓ 通过 Home tab 返回首页');
+                    // 🔥 回到首页后检查弹窗
+                    await this.checkAndHandleHomePopups(20);
                     return true;
                 }
             }
@@ -323,6 +362,8 @@ export class AuthHelper {
             const check2 = await this._isOnHomePage();
             if (check2) {
                 console.log('        ✓ 通过返回按钮回到首页');
+                // 🔥 回到首页后检查弹窗
+                await this.checkAndHandleHomePopups(20);
                 return true;
             }
 
@@ -336,6 +377,8 @@ export class AuthHelper {
         console.log('        ⚠️ 所有策略失败，直接导航到首页URL');
         await this.page.goto(dataConfig.url);
         await this.safeWait(3000);
+        // 🔥 强制导航后检查弹窗
+        await this.checkAndHandleHomePopups(20);
         return true;
     }
 
@@ -488,7 +531,7 @@ export class AuthHelper {
                 break;
             }
 
-            console.log(`        🔍 第${attempts}次检查弹窗...`);
+            console.log(`        🔍 第${attempts}次检查子页面...`);
 
             // 🔥 第一步：检测是否在子页面，如果是就先离开
             const subPage = await this._detectCurrentPage();
@@ -517,62 +560,149 @@ export class AuthHelper {
                 continue;
             }
 
-            // 🔥 第二步：在首页了，检查弹窗
-            const popupContentVisible = await this.page.locator('.popup-content')
-                .isVisible({ timeout: 1000 })
-                .catch(() => false);
-
-            if (popupContentVisible) {
-                console.log(`        🔄 发现 popup-content 弹窗，正在关闭...`);
-
-                const closeSuccess = await this._tryClosePopup();
-                if (!closeSuccess) {
-                    await this.dismissOverlay();
-                }
-
-                await this.safeWait(1000);
-                continue;
-            }
-
-            // 第三步：检查其他类型弹窗
-            const otherPopup = await this._checkOtherPopups();
-            if (otherPopup) {
-                continue;
-            }
-
-            // 没有弹窗也不在子页面
-            console.log(`        ✅ 第${attempts}次检查：无弹窗，页面干净`);
+            // 🔥 第二步：已经在首页了，跳出循环
+            console.log(`        ✅ 第${attempts}次检查：已在首页`);
             break;
         }
 
         if (attempts >= maxAttempts) {
             console.warn(`        ⚠️ 已达最大尝试次数(${maxAttempts})，停止检查`);
         }
+
+        // 🔥 确认在首页后，统一检查弹窗
+        const onHome = await this._isOnHomePage();
+        if (onHome) {
+            console.log('        📍 确认在首页，开始检查弹窗...');
+            await this.checkAndHandleHomePopups(20);
+        }
     }
 
+    /**
+     * 🔥 尝试关闭 popup-content 弹窗
+     * 逻辑：记录当前 URL → 点击弹窗图片 → 等待跳转 → 路由返回 → 如果路由未变则点击返回按钮 → 失败则截图报错
+     */
     async _tryClosePopup() {
-        const closeSelectors = [
-            '.popup_img',
-            '.popup-close',
-            '.modal-close',
-            '.close-btn',
-            '[data-testid="close"]'
-        ];
+        try {
+            // 🔥 记录点击前的 URL
+            const beforeUrl = this.page.url();
+            console.log(`        📍 点击前 URL: ${beforeUrl}`);
 
-        for (const selector of closeSelectors) {
-            try {
-                const el = this.page.locator(selector).first();
-                const visible = await el.isVisible({ timeout: 500 }).catch(() => false);
-                if (visible) {
-                    await el.click();
-                    console.log(`        ✓ 通过 ${selector} 关闭弹窗`);
-                    await this.safeWait(1000);
-                    return true;
+            // 1. 查找并点击弹窗图片（多种选择器）
+            const imgSelectors = [
+                '.popup_img',
+                '.img_popup_img',
+                '.popup-content img',
+                '.popup-mask img'
+            ];
+
+            let imgClicked = false;
+            for (const selector of imgSelectors) {
+                const popupImg = this.page.locator(selector).first();
+                const imgVisible = await popupImg.isVisible({ timeout: 1000 }).catch(() => false);
+
+                if (imgVisible) {
+                    console.log(`        🖼️ 点击弹窗图片 (${selector})...`);
+                    await popupImg.click();
+                    imgClicked = true;
+                    await this.safeWait(2000);
+                    break;
                 }
-            } catch (e) { }
-        }
+            }
 
-        return false;
+            if (!imgClicked) {
+                console.log('        ⚠️ 未找到弹窗图片，尝试其他关闭方式');
+                const closeSelectors = ['.popup-close', '.modal-close', '.close-btn', '[data-testid="close"]'];
+
+                for (const selector of closeSelectors) {
+                    try {
+                        const el = this.page.locator(selector).first();
+                        const visible = await el.isVisible({ timeout: 500 }).catch(() => false);
+                        if (visible) {
+                            await el.click();
+                            console.log(`        ✓ 通过 ${selector} 关闭弹窗`);
+                            await this.safeWait(1000);
+                            return true;
+                        }
+                    } catch (e) { }
+                }
+                return false;
+            }
+
+            // 🔥 记录点击后的 URL
+            const afterUrl = this.page.url();
+            console.log(`        📍 点击后 URL: ${afterUrl}`);
+
+            // 2. 检查是否跳转到了子页面
+            const subPage = await this._detectCurrentPage();
+
+            if (subPage) {
+                console.log(`        📍 检测到跳转到了 ${subPage}`);
+
+                // 🔥 优先策略：路由返回
+                if (afterUrl !== beforeUrl) {
+                    console.log(`        🔙 URL 已变化，使用路由返回 (goBack)...`);
+                    await this.page.goBack();
+                    await this.safeWait(1500);
+
+                    const returnedUrl = this.page.url();
+                    console.log(`        📍 返回后 URL: ${returnedUrl}`);
+
+                    const stillInSub = await this._detectCurrentPage();
+                    if (stillInSub) {
+                        console.log(`        ⚠️ 路由返回后仍在 ${stillInSub}，尝试点击返回按钮...`);
+                        await this._clickBackButton();
+                        await this.safeWait(1000);
+
+                        const finalCheck = await this._detectCurrentPage();
+                        if (finalCheck) {
+                            const errorMsg = `返回失败：路由返回和点击返回按钮都无效，仍在 ${finalCheck}`;
+                            console.log(`        ❌ ${errorMsg}`);
+
+                            if (this.t && this.t.captureErrorScreenshot) {
+                                await this.t.captureErrorScreenshot('popup-return-failed');
+                            }
+
+                            console.log(`        ⚠️ 强制导航到首页`);
+                            await this.page.goto(dataConfig.url);
+                            await this.safeWait(2000);
+                        } else {
+                            console.log('        ✅ 通过点击返回按钮成功返回 Home');
+                        }
+                    } else {
+                        console.log('        ✅ 路由返回成功');
+                    }
+                } else {
+                    // 🔥 URL 未变化，使用点击返回按钮
+                    console.log(`        🔙 URL 未变化，使用点击返回按钮...`);
+                    await this._clickBackButton();
+                    await this.safeWait(1000);
+
+                    const stillInSub = await this._detectCurrentPage();
+                    if (stillInSub) {
+                        const errorMsg = `返回失败：点击返回按钮无效，仍在 ${stillInSub}`;
+                        console.log(`        ❌ ${errorMsg}`);
+
+                        if (this.t && this.t.captureErrorScreenshot) {
+                            await this.t.captureErrorScreenshot('popup-click-back-failed');
+                        }
+
+                        console.log(`        ⚠️ 强制导航到首页`);
+                        await this.page.goto(dataConfig.url);
+                        await this.safeWait(2000);
+                    } else {
+                        console.log('        ✅ 点击返回按钮成功');
+                    }
+                }
+            } else {
+                console.log('        ✅ 弹窗已关闭（未跳转到子页面）');
+            }
+
+            return true;
+
+        } catch (e) {
+            console.log(`        ❌ 关闭弹窗失败: ${e.message}`);
+            return false;
+        }
     }
 
     async _checkOtherPopups() {
@@ -600,6 +730,70 @@ export class AuthHelper {
         return false;
     }
 
+    /**
+     * 🔥 循环检查并处理首页弹窗（通用函数）
+     * 每次进入 Home 页面时都应该调用此函数
+     * @param {number} maxChecks - 最大检查次数，默认 20
+     * @returns {Promise<number>} 返回处理的弹窗数量
+     */
+    async checkAndHandleHomePopups(maxChecks = 20) {
+        console.log(`        🔍 开始检查首页弹窗（最多 ${maxChecks} 次）...`);
+        let popupCount = 0;
+        let checkCount = 0;
+
+        while (checkCount < maxChecks) {
+            checkCount++;
+
+            // 🔥 检查是否有弹窗（使用多个选择器逐个尝试）
+            let hasPopup = false;
+
+            // 尝试多个选择器
+            const selectors = [
+                '.popup-content',
+                '.popup-mask',
+                '.modal-overlay',
+                'div.popup-content',
+                '[class*="popup"]'
+            ];
+
+            for (const selector of selectors) {
+                const visible = await this.page.locator(selector)
+                    .first()
+                    .isVisible({ timeout: 500 })
+                    .catch(() => false);
+
+                if (visible) {
+                    hasPopup = true;
+                    console.log(`        ✓ 通过选择器 "${selector}" 检测到弹窗`);
+                    break;
+                }
+            }
+
+            if (hasPopup) {
+                popupCount++;
+                console.log(`        � 第${checkCount}次检查：发现第${popupCount}个弹窗，处理中...`);
+
+                const closeSuccess = await this._tryClosePopup();
+                if (!closeSuccess) {
+                    console.log(`        ⚠️ _tryClosePopup 失败，尝试 dismissOverlay`);
+                    await this.dismissOverlay();
+                }
+
+                await this.safeWait(1000);
+            } else {
+                console.log(`        ✅ 第${checkCount}次检查：无弹窗`);
+                break;
+            }
+        }
+
+        if (checkCount >= maxChecks) {
+            console.log(`        ⚠️ 已达最大检查次数(${maxChecks})，停止检查`);
+        }
+
+        console.log(`        📊 弹窗检查完成：共处理 ${popupCount} 个弹窗`);
+        return popupCount;
+    }
+
     async _finalCleanup() {
         await this.safeWait(1000);
 
@@ -625,10 +819,15 @@ export class AuthHelper {
         const onHome = await this._isOnHomePage();
         if (onHome) {
             console.log('        ✅ 最终确认：在首页，页面干净');
+            // 🔥 在首页，检查弹窗
+            await this.checkAndHandleHomePopups(20);
         } else {
             console.log('        ⚠️ 最终确认：不在首页，强制导航');
             await this.page.goto(dataConfig.url);
             await this.safeWait(2000);
+
+            // 🔥 强制导航后检查弹窗
+            await this.checkAndHandleHomePopups(20);
         }
     }
 
