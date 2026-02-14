@@ -1053,6 +1053,15 @@ export class PerformanceMonitor {
         newResourcesTotalSize: 0
       };
 
+      // 🔥 优先使用 SPAPerformanceMeasurer 的数据
+      if (window.__spaMetrics && window.__spaMetrics.renderComplete) {
+        const navStart = window.__spaMetrics.navStart || 0;
+        const renderComplete = window.__spaMetrics.renderComplete || 0;
+        if (renderComplete > navStart) {
+          result.pageLoadTime = Math.round(renderComplete - navStart);
+        }
+      }
+
       // 只统计 resetTime 之后 3 秒内加载的资源（排除用户操作期间加载的资源）
       var cutoff = resetTime + 3000;
       var allResources = performance.getEntriesByType('resource');
@@ -1086,8 +1095,12 @@ export class PerformanceMonitor {
         result.newResourcesLoadTime = Math.round(maxDuration);
         result.largestNewResource = largestResource;
         result.newResourcesTotalSize = totalSize;
-        // 切换耗时 = 最后一个初始资源完成时间 - 页面切换时间
-        result.pageLoadTime = Math.round(latestEnd - resetTime);
+
+        // 🔥 如果没有从 SPAPerformanceMeasurer 获取到数据，使用资源加载时间
+        if (result.pageLoadTime === 0) {
+          // 切换耗时 = 最后一个初始资源完成时间 - 页面切换时间
+          result.pageLoadTime = Math.round(latestEnd - resetTime);
+        }
       }
 
       return result;

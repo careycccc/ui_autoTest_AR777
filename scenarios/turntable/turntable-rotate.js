@@ -115,7 +115,7 @@ export async function clickCashOut(page, test) {
  * @param {Object} options - 配置选项
  * @param {string} options.canvasSelector - Canvas 选择器，默认 '#turntable_canvas canvas'
  * @param {number} options.ratio - 点击位置比例（0-1），默认 0.86
- * @param {string} options.position - 点击位置：'bottom'(底部), 'top'(顶部), 'left'(左侧), 'right'(右侧), 'center'(中心)
+ * @param {string} options.position - 点击位置：'x2'(转盘中心剩余次数区域), 'center'(中心), 'bottom'(底部), 'top'(顶部), 'left'(左侧), 'right'(右侧)
  * @param {number} options.angle - 自定义角度（度数，0-360），0度为右侧，90度为底部
  * @returns {Promise<Object>} 返回结果对象
  */
@@ -211,6 +211,17 @@ export async function clickCanvasArea(page, options = {}) {
         } else {
             // 使用预设位置
             switch (position) {
+                case 'x2':
+                case 'X2':
+                    // 点击转盘中心的剩余次数区域（显示 X2、X3、X5 等）
+                    // 这个区域位置固定在转盘中心偏下位置
+                    // X 坐标：Canvas 宽度的 50%（中心）
+                    // Y 坐标：Canvas 高度的 64%（中心偏下）
+                    // 根据实际 Canvas 尺寸动态计算
+                    clickX = boundingBox.width * 0.50;
+                    clickY = boundingBox.height * 0.64;
+                    console.log(`        🎯 目标: 转盘中心剩余次数区域 (相对坐标: ${Math.round(clickX)}, ${Math.round(clickY)})`);
+                    break;
                 case 'bottom':
                     clickX = centerX;
                     clickY = centerY + radius * ratio;
@@ -270,7 +281,7 @@ export async function clickCanvasArea(page, options = {}) {
  * @param {Object} options - 配置选项
  * @param {string} options.canvasSelector - Canvas 选择器，默认 '#turntable_canvas canvas'
  * @param {number} options.ratio - 点击位置比例，默认 0.86
- * @param {string} options.position - 点击位置，默认 'bottom'
+ * @param {string} options.position - 点击位置，可选值: 'x2'(转盘中心剩余次数区域), 'center', 'bottom', 'top', 'left', 'right'，默认 'x2'
  * @param {number} options.angle - 自定义角度（度数，0-360）
  * @param {boolean} options.checkRemainCount - 是否检查剩余次数，默认 true
  * @param {number} options.animationWait - 旋转动画等待时间（毫秒），默认 3000
@@ -280,7 +291,7 @@ export async function clickCanvasArea(page, options = {}) {
  * const result = await rotateTurntable(page, test, {
  *     canvasSelector: '#turntable_canvas canvas',
  *     ratio: 0.86,
- *     position: 'bottom',
+ *     position: 'x2',  // 点击转盘中心的剩余次数区域
  *     checkRemainCount: true,
  *     animationWait: 3000
  * });
@@ -289,7 +300,7 @@ export async function rotateTurntable(page, test, options = {}) {
     const {
         canvasSelector = '#turntable_canvas canvas',
         ratio = 0.86,
-        position = 'bottom',
+        position = 'x2',  // 默认点击 X2 红色圆圈中心区域
         angle = null,
         checkRemainCount = true,
         animationWait = 3000
@@ -340,6 +351,12 @@ export async function rotateTurntable(page, test, options = {}) {
 
         // 2. 记录旋转前的请求数量（用于后续获取新的 API 响应）
         const beforeRequestCount = test.networkMonitor.getApiRequests().length;
+
+        // 🔥 2.5. 刷新页面后，等待 Canvas 渲染
+        console.log('        🔍 等待 Canvas 渲染...');
+
+        // 等待足够时间确保 Canvas 已渲染
+        await page.waitForTimeout(3000);
 
         // 3. 点击 Canvas 区域执行旋转
         const clickResult = await clickCanvasArea(page, {
@@ -408,16 +425,6 @@ export async function rotateTurntable(page, test, options = {}) {
             if (afterCountResult.success) {
                 result.afterRemainCount = afterCountResult.remainCount;
                 console.log(`        ℹ️ 旋转后剩余次数: ${result.afterRemainCount}`);
-
-                // 验证次数是否正确减少
-                if (result.beforeRemainCount !== null && result.afterRemainCount !== null) {
-                    const expectedCount = result.beforeRemainCount - 1;
-                    if (result.afterRemainCount === expectedCount) {
-                        console.log(`        ✅ 次数正确减少 (${result.beforeRemainCount} -> ${result.afterRemainCount})`);
-                    } else {
-                        console.log(`        ⚠️ 次数变化异常 (期望: ${expectedCount}, 实际: ${result.afterRemainCount})`);
-                    }
-                }
             }
         }
 

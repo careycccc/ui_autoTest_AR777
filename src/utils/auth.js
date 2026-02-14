@@ -578,6 +578,362 @@ export class AuthHelper {
     }
 
     /**
+     * 🔥 获取首页弹窗配置数据
+     * 从 /api/Home/GetCommonPopup 接口获取弹窗信息
+     * @returns {Promise<Array>} 返回弹窗配置数组
+     */
+    async _getHomePopupConfig() {
+        try {
+            // 从网络监控中查找弹窗接口
+            const apiRequests = this.t.networkMonitor.getApiRequests();
+            const popupRequest = apiRequests.find(req =>
+                req.url.includes('/api/Home/GetCommonPopup')
+            );
+
+            if (!popupRequest || !popupRequest.responseBody) {
+                console.log('        ⚠️ 未找到首页弹窗接口数据');
+                return [];
+            }
+
+            const response = popupRequest.responseBody;
+            if (response.code === 0 && Array.isArray(response.data)) {
+                console.log(`        📊 获取到 ${response.data.length} 个弹窗配置`);
+                return response.data;
+            }
+
+            return [];
+        } catch (error) {
+            console.log(`        ⚠️ 解析弹窗配置失败: ${error.message}`);
+            return [];
+        }
+    }
+
+    /**
+     * 🔥 根据 jumpPageText 获取断言文本
+     * @param {string} jumpPageText - 跳转页面文本（如"充值"、"洗码"等）
+     * @returns {string|null} 返回断言文本，如果没有映射则返回 null
+     */
+    _getAssertTextByJumpPage(jumpPageText) {
+        const jumpPageMap = {
+            // 原有映射
+            "充值": "Deposit",
+            "洗码": "Rebate",
+            "邀请转盘": "Invitation Wheel",
+            "亏损救援金": "Loss Rebate",
+            "每日签到": "Daily deposit rewards",
+
+            // 新增映射
+            "周卡月卡": "Promotions",
+            "每日每周任务": "Tasks",
+            "首页": "Home",
+            "我的": "UID",  // 特殊处理：只需匹配 UID
+            "充值转盘": "Deposit Wheel",
+            "新版返佣": "My Rewards",
+            "站内信": "Notifications",
+            "锦标赛": "Championship",
+            "VIP": "VIP",
+            "超级大奖": "Super Jackpot",
+            "优惠券": "Coupons",
+            "礼品码": "Home",
+            "提现": "Withdraw"
+        };
+
+        return jumpPageMap[jumpPageText] || null;
+    }
+
+    /**
+     * 🔥 智能处理首页弹窗（基于接口数据）
+     * 根据 jumpPageText 判断是否需要页面跳转
+     * @param {Object} popupConfig - 弹窗配置对象
+     * @returns {Promise<boolean>} 返回是否成功处理
+     */
+    async _handleSmartPopup(popupConfig) {
+        try {
+            const { popupInfo, title } = popupConfig;
+
+            if (!popupInfo) {
+                console.log('        ⚠️ 弹窗配置缺少 popupInfo');
+                return false;
+            }
+
+            const jumpPageText = popupInfo.jumpPageText;
+            console.log(`        📋 弹窗标题: ${title || '未知'}`);
+            console.log(`        📋 跳转页面: ${jumpPageText || '无'}`);
+
+            // 🔥 记录点击前的 URL
+            const beforeUrl = this.page.url();
+            console.log(`        📍 点击前 URL: ${beforeUrl}`);
+
+            // 1. 查找并点击弹窗图片
+            const imgSelectors = [
+                '.popup_img',
+                '.img_popup_img',
+                '.popup-content img',
+                '.popup-mask img'
+            ];
+
+            let imgClicked = false;
+            for (const selector of imgSelectors) {
+                const popupImg = this.page.locator(selector).first();
+                const imgVisible = await popupImg.isVisible({ timeout: 1000 }).catch(() => false);
+
+                if (imgVisible) {
+                    console.log(`        🖼️ 点击弹窗图片 (${selector})...`);
+                    await popupImg.click();
+                    imgClicked = true;
+                    await this.safeWait(2000);
+                    break;
+                }
+            }
+
+            if (!imgClicked) {
+                console.log('        ⚠️ 未找到弹窗图片');
+                return false;
+            }
+
+            // 🔥 记录点击后的 URL
+            const afterUrl = this.page.url();
+            console.log(`        📍 点击后 URL: ${afterUrl}`);
+
+            // 2. 判断是否发生了路由跳转
+            const urlChanged = afterUrl !== beforeUrl;
+            console.log(`        📊 路由是否变化: ${urlChanged ? '是' : '否'}`);
+
+            // 3. 根据 jumpPageText 和路由变化情况处理
+            if (jumpPageText && urlChanged) {
+                // 🔥 情况1: 有 jumpPageText 且路由变化 → 处理活动页面
+                console.log(`        🎯 检测到页面跳转，处理活动页面...`);
+
+                const assertText = this._getAssertTextByJumpPage(jumpPageText);
+
+                if (assertText) {
+                    console.log(`        ✓ 映射断言文本: ${assertText}`);
+
+                    // 处理多个断言文本（用 / 分隔）
+                    const assertTexts = assertText.includes('/')
+                        ? assertText.split('/').map(t => t.trim())
+                        : [assertText];
+
+                    // 🔥 等待页面加载完成（等待最大元素或 3 秒）
+                    console.log(`        ⏳ 等待页面加载完成...`);
+
+                    // 尝试等待页面的主要内容加载
+                    const loadWaitPromises = [
+                        // 等待 3 秒兜底
+                        this.page.waitForTimeout(3000),
+                        // 尝试等待 domcontentloaded
+                        this.page.waitForLoadState('domcontentloaded').catch(() => { }),
+                        // 尝试等待网络空闲
+                        this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => { })
+                    ];
+
+                    await Promise.race(loadWaitPromises);
+                    console.log(`        ✅ 页面加载完成`);
+
+                    // 尝试每个断言文本
+                    let assertSuccess = false;
+                    let matchedAssertText = null;
+
+                    for (const text of assertTexts) {
+                        let selector;
+                        let exists = false;
+
+                        // 🔥 特殊处理：UID 只需要部分匹配
+                        if (text === 'UID') {
+                            // 使用正则表达式匹配包含 UID 的文本
+                            selector = 'text=/UID/i';
+                            exists = await this.page.locator(selector)
+                                .first()
+                                .isVisible({ timeout: 2000 })
+                                .catch(() => false);
+
+                            if (exists) {
+                                console.log(`        ✅ 断言成功: ${text} (部分匹配)`);
+                                assertSuccess = true;
+                                matchedAssertText = text;
+                                break;
+                            }
+                        } else {
+                            // 普通文本匹配
+                            selector = `text=${text}`;
+                            exists = await this.page.locator(selector)
+                                .isVisible({ timeout: 2000 })
+                                .catch(() => false);
+
+                            if (exists) {
+                                console.log(`        ✅ 断言成功: ${text}`);
+                                assertSuccess = true;
+                                matchedAssertText = text;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!assertSuccess) {
+                        console.log(`        ⚠️ 断言失败，尝试的文本: ${assertTexts.join(', ')}`);
+                    }
+
+                    // 🔥 调用对应的活动处理函数
+                    if (assertSuccess && matchedAssertText) {
+                        try {
+                            // 动态导入处理函数（使用正确的相对路径）
+                            const { executePopupHandler } = await import('../../scenarios/home-popup/index.js');
+
+                            const handlerResult = await executePopupHandler(
+                                matchedAssertText,
+                                this.page,
+                                this,
+                                this.t
+                            );
+
+                            if (handlerResult.success) {
+                                console.log(`        ✅ 活动页面处理完成`);
+                            } else if (handlerResult.skipped) {
+                                console.log(`        ℹ️ 活动页面无需处理`);
+                            } else {
+                                console.log(`        ⚠️ 活动页面处理失败: ${handlerResult.error}`);
+                            }
+                        } catch (importError) {
+                            console.log(`        ⚠️ 导入处理函数失败: ${importError.message}`);
+                        }
+                    }
+                } else {
+                    console.log(`        ⚠️ 未找到 "${jumpPageText}" 的断言映射`);
+                    // 即使没有映射，也等待 3 秒
+                    console.log(`        ⏳ 等待 3 秒...`);
+                    await this.page.waitForTimeout(3000);
+                }
+
+                // 返回首页
+                console.log(`        🔙 返回首页...`);
+                await this.page.goBack();
+                await this.safeWait(1500);
+
+                // 确认返回成功
+                const returnedUrl = this.page.url();
+                if (returnedUrl === beforeUrl) {
+                    console.log('        ✅ 成功返回首页');
+                } else {
+                    console.log('        ⚠️ 路由返回失败，尝试点击返回按钮...');
+                    await this._clickBackButton();
+                    await this.safeWait(1000);
+                }
+
+            } else if (urlChanged) {
+                // 🔥 情况2: 没有 jumpPageText 但路由变化 → 等待后直接返回
+                console.log(`        🔙 路由已变化但无 jumpPageText，等待后返回首页...`);
+
+                // 等待 3 秒
+                console.log(`        ⏳ 等待 3 秒...`);
+                await this.page.waitForTimeout(3000);
+
+                await this.page.goBack();
+                await this.safeWait(1500);
+
+            } else {
+                // 🔥 情况3: 路由未变化 → 弹窗已自动关闭
+                console.log('        ✅ 弹窗已关闭（路由未变化）');
+            }
+
+            return true;
+
+        } catch (error) {
+            console.log(`        ❌ 智能处理弹窗失败: ${error.message}`);
+            return false;
+        }
+    }
+
+    /**
+     * 🔥 循环检查并处理首页弹窗（通用函数）
+     * 每次进入 Home 页面时都应该调用此函数
+     * @param {number} maxChecks - 最大检查次数，默认 20
+     * @returns {Promise<number>} 返回处理的弹窗数量
+     */
+    async checkAndHandleHomePopups(maxChecks = 20) {
+        console.log(`        🔍 开始检查首页弹窗（最多 ${maxChecks} 次）...`);
+
+        // 🔥 获取弹窗配置数据
+        const popupConfigs = await this._getHomePopupConfig();
+        let currentPopupIndex = 0;
+
+        let popupCount = 0;
+        let checkCount = 0;
+
+        while (checkCount < maxChecks) {
+            checkCount++;
+
+            // 🔥 检查是否有弹窗（使用多个选择器逐个尝试）
+            let hasPopup = false;
+
+            // 尝试多个选择器
+            const selectors = [
+                '.popup-content',
+                '.popup-mask',
+                '.modal-overlay',
+                'div.popup-content',
+                '[class*="popup"]'
+            ];
+
+            for (const selector of selectors) {
+                const visible = await this.page.locator(selector)
+                    .first()
+                    .isVisible({ timeout: 500 })
+                    .catch(() => false);
+
+                if (visible) {
+                    hasPopup = true;
+                    console.log(`        ✓ 通过选择器 "${selector}" 检测到弹窗`);
+                    break;
+                }
+            }
+
+            if (hasPopup) {
+                popupCount++;
+                console.log(`        🎁 第${checkCount}次检查：发现第${popupCount}个弹窗，处理中...`);
+
+                // 🔥 如果有弹窗配置数据，使用智能处理
+                if (popupConfigs.length > 0 && currentPopupIndex < popupConfigs.length) {
+                    const popupConfig = popupConfigs[currentPopupIndex];
+                    console.log(`        📋 使用配置数据处理弹窗 ${currentPopupIndex + 1}/${popupConfigs.length}`);
+
+                    const smartSuccess = await this._handleSmartPopup(popupConfig);
+
+                    if (!smartSuccess) {
+                        console.log(`        ⚠️ 智能处理失败，使用传统方式`);
+                        const closeSuccess = await this._tryClosePopup();
+                        if (!closeSuccess) {
+                            console.log(`        ⚠️ _tryClosePopup 失败，尝试 dismissOverlay`);
+                            await this.dismissOverlay();
+                        }
+                    }
+
+                    currentPopupIndex++;
+                } else {
+                    // 🔥 没有配置数据，使用传统方式
+                    console.log(`        📋 使用传统方式处理弹窗`);
+                    const closeSuccess = await this._tryClosePopup();
+                    if (!closeSuccess) {
+                        console.log(`        ⚠️ _tryClosePopup 失败，尝试 dismissOverlay`);
+                        await this.dismissOverlay();
+                    }
+                }
+
+                await this.safeWait(1000);
+            } else {
+                console.log(`        ✅ 第${checkCount}次检查：无弹窗`);
+                break;
+            }
+        }
+
+        if (checkCount >= maxChecks) {
+            console.log(`        ⚠️ 已达最大检查次数(${maxChecks})，停止检查`);
+        }
+
+        console.log(`        📊 弹窗检查完成：共处理 ${popupCount} 个弹窗`);
+        return popupCount;
+    }
+
+    /**
      * 🔥 尝试关闭 popup-content 弹窗
      * 逻辑：记录当前 URL → 点击弹窗图片 → 等待跳转 → 路由返回 → 如果路由未变则点击返回按钮 → 失败则截图报错
      */
@@ -728,70 +1084,6 @@ export class AuthHelper {
         }
 
         return false;
-    }
-
-    /**
-     * 🔥 循环检查并处理首页弹窗（通用函数）
-     * 每次进入 Home 页面时都应该调用此函数
-     * @param {number} maxChecks - 最大检查次数，默认 20
-     * @returns {Promise<number>} 返回处理的弹窗数量
-     */
-    async checkAndHandleHomePopups(maxChecks = 20) {
-        console.log(`        🔍 开始检查首页弹窗（最多 ${maxChecks} 次）...`);
-        let popupCount = 0;
-        let checkCount = 0;
-
-        while (checkCount < maxChecks) {
-            checkCount++;
-
-            // 🔥 检查是否有弹窗（使用多个选择器逐个尝试）
-            let hasPopup = false;
-
-            // 尝试多个选择器
-            const selectors = [
-                '.popup-content',
-                '.popup-mask',
-                '.modal-overlay',
-                'div.popup-content',
-                '[class*="popup"]'
-            ];
-
-            for (const selector of selectors) {
-                const visible = await this.page.locator(selector)
-                    .first()
-                    .isVisible({ timeout: 500 })
-                    .catch(() => false);
-
-                if (visible) {
-                    hasPopup = true;
-                    console.log(`        ✓ 通过选择器 "${selector}" 检测到弹窗`);
-                    break;
-                }
-            }
-
-            if (hasPopup) {
-                popupCount++;
-                console.log(`        � 第${checkCount}次检查：发现第${popupCount}个弹窗，处理中...`);
-
-                const closeSuccess = await this._tryClosePopup();
-                if (!closeSuccess) {
-                    console.log(`        ⚠️ _tryClosePopup 失败，尝试 dismissOverlay`);
-                    await this.dismissOverlay();
-                }
-
-                await this.safeWait(1000);
-            } else {
-                console.log(`        ✅ 第${checkCount}次检查：无弹窗`);
-                break;
-            }
-        }
-
-        if (checkCount >= maxChecks) {
-            console.log(`        ⚠️ 已达最大检查次数(${maxChecks})，停止检查`);
-        }
-
-        console.log(`        📊 弹窗检查完成：共处理 ${popupCount} 个弹窗`);
-        return popupCount;
     }
 
     async _finalCleanup() {

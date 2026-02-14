@@ -465,38 +465,6 @@ await t.assert.toHaveText('#element', 'Expected Text');
 await t.assert.toHaveURL(/dashboard/);
 ```
 
-### Telegram 跳转和返回
-
-封装了 Telegram 跳转和返回的通用函数，自动处理跳转、验证和返回逻辑。
-
-```javascript
-import { handleTelegramJump } from './scenarios/utils.js';
-
-// 基本用法
-const result = await handleTelegramJump(page, '.share-icons', {
-  telegramText: 'Telegram',  // Telegram 文本标识
-  jumpTimeout: 5000,         // 跳转超时时间
-  waitAfterBack: 1000,       // 返回后等待时间
-  verifyReturn: true         // 验证是否返回原页面
-});
-
-// 检查结果
-if (result.success) {
-  console.log('✅ Telegram 跳转和返回成功');
-} else {
-  console.log(`❌ 失败: ${result.error}`);
-}
-
-// 结果对象包含：
-// - success: 是否成功
-// - jumped: 是否成功跳转
-// - returned: 是否成功返回
-// - originalUrl: 原始页面 URL
-// - jumpUrl: 跳转后的 URL
-// - returnUrl: 返回后的 URL
-// - error: 错误信息
-```
-
 ### 性能数据采集
 
 ```javascript
@@ -552,8 +520,7 @@ const pageRecords = t.getPageRecords();
 │       └── home-cases.js        # 子用例注册
 ├── tests/                       # 测试用例
 │   ├── runAll.test.js           # 完整测试套件
-│   ├── example.test.js          # 示例测试
-│   └── telegram-jump-demo.test.js  # Telegram 跳转演示
+│   └── example.test.js          # 示例测试
 └── reports/                     # 测试报告
     ├── screenshots/             # 截图
     ├── console-errors/          # 控制台错误截图
@@ -645,38 +612,6 @@ await t.assert.toHaveURL(pattern)
 ```
 
 ### 工具函数
-
-#### handleTelegramJump
-
-Telegram 跳转和返回的通用函数。
-
-```javascript
-import { handleTelegramJump } from './scenarios/utils.js';
-
-const result = await handleTelegramJump(page, parentSelector, options);
-```
-
-**参数：**
-- `page` (Page): Playwright 页面对象
-- `parentSelector` (string): 父容器选择器，如 `.share-icons`
-- `options` (Object): 可选配置
-  - `telegramText` (string): Telegram 文本标识，默认 `'Telegram'`
-  - `jumpTimeout` (number): 跳转等待超时时间（毫秒），默认 `5000`
-  - `waitAfterBack` (number): 返回后等待时间（毫秒），默认 `1000`
-  - `verifyReturn` (boolean): 是否验证返回到原页面，默认 `true`
-
-**返回值：**
-```javascript
-{
-  success: boolean,      // 是否成功
-  jumped: boolean,       // 是否成功跳转
-  returned: boolean,     // 是否成功返回
-  originalUrl: string,   // 原始页面 URL
-  jumpUrl: string,       // 跳转后的 URL
-  returnUrl: string,     // 返回后的 URL
-  error: string          // 错误信息
-}
-```
 
 #### clickIfTextExists
 

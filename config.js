@@ -218,7 +218,7 @@ export default {
 
 // dataConfig
 export const dataConfig = {
-  userName: '2002199744',  // 测试的前台登录账号
+  userName: '2002199799',  // 测试的前台登录账号
   areaCodeData: '91',  // 区号
   url: 'https://arplatsaassit4.club', // 前台地址
   adminUrl: 'https://arsitasdfghjklusa.com',//后台地址

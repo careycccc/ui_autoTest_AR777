@@ -98,7 +98,6 @@ export async function earnInviteLink(page, test) {
         if (!isVisible) {
             return await handleFailure(test, '新版返佣的邀请按钮不可见，跳过', { throwError: true });
         }
-
         // 等待页面切换
         await test.switchToPage('进入新版返佣的邀请界面', {
             waitForSelector: 'text=Share',
@@ -376,3 +375,7 @@ export async function earnInviteRewardsGoToAttend(page, test, options = {}) {
         return await handleFailure(test, `Go To Attend->earnInviteRewardsGoToAttend 执行失败: ${error.message}`, { throwError: true });
     }
 }
+
+
+
+
