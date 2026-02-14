@@ -2,6 +2,90 @@ import { handleFailure } from '../utils.js';
 import { getApiResponseData, getApiResponses } from '../utils.js';
 
 /**
+ * 检查是否需要执行转盘旋转
+ * @param {Page} page - Playwright page 对象
+ * @param {TestCase} test - TestCase 实例
+ * @returns {Promise<Object>} 返回检查结果
+ */
+export async function shouldRotateTurntable(page, test) {
+    const result = {
+        shouldRotate: false,
+        reason: '',
+        currentAmount: 0,
+        targetAmount: 0,
+        remainCount: 0
+    };
+
+    try {
+        // 1. 获取接口数据
+        const wheelInfo = getWheelRemainCount(test);
+
+        if (!wheelInfo.success) {
+            result.reason = '无法获取转盘信息接口';
+            console.log(`        ⚠️ ${result.reason}`);
+            return result;
+        }
+
+        result.remainCount = wheelInfo.remainCount;
+        result.currentAmount = wheelInfo.currentAmount;
+        result.targetAmount = wheelInfo.totalPrizeAmount;
+
+        // 2. 检查剩余次数
+        if (wheelInfo.remainCount === 0) {
+            result.reason = '剩余次数为 0';
+            console.log(`        ℹ️ ${result.reason}，无需旋转`);
+            return result;
+        }
+
+        // 3. 获取页面显示的金额
+        const displayAmount = await page.evaluate(() => {
+            const amountEl = document.querySelector('.scroll_num');
+            if (!amountEl) return null;
+
+            const text = amountEl.textContent || '';
+            // 移除货币符号和逗号，提取数字
+            const match = text.replace(/[₹,]/g, '').trim();
+            return parseFloat(match) || 0;
+        }).catch(() => null);
+
+        if (displayAmount === null) {
+            console.log('        ⚠️ 无法读取页面显示金额，继续检查接口数据');
+        } else {
+            console.log(`        📊 页面显示金额: ${displayAmount}`);
+
+            // 4. 对比页面金额和目标金额
+            if (displayAmount >= wheelInfo.totalPrizeAmount) {
+                result.reason = `页面显示金额 (${displayAmount}) 已达到目标金额 (${wheelInfo.totalPrizeAmount})`;
+                console.log(`        ℹ️ ${result.reason}，无需旋转`);
+                return result;
+            }
+        }
+
+        // 5. 对比接口金额和目标金额
+        if (wheelInfo.currentAmount >= wheelInfo.totalPrizeAmount) {
+            result.reason = `当前金额 (${wheelInfo.currentAmount}) 已达到目标金额 (${wheelInfo.totalPrizeAmount})`;
+            console.log(`        ℹ️ ${result.reason}，无需旋转`);
+            return result;
+        }
+
+        // 6. 可以旋转
+        result.shouldRotate = true;
+        result.reason = '满足旋转条件';
+        console.log(`        ✅ ${result.reason}`);
+        console.log(`           剩余次数: ${result.remainCount}`);
+        console.log(`           当前金额: ${result.currentAmount}`);
+        console.log(`           目标金额: ${result.targetAmount}`);
+
+        return result;
+
+    } catch (error) {
+        result.reason = `检查失败: ${error.message}`;
+        console.log(`        ❌ ${result.reason}`);
+        return result;
+    }
+}
+
+/**
  * 获取转盘剩余次数（从已请求的接口中获取）
  * 
  * @param {TestCase} test - TestCase 实例
@@ -389,7 +473,7 @@ export async function rotateTurntable(page, test, options = {}) {
 
         // 6. 查找旋转结果接口
         const spinRequest = newRequests.find(req =>
-            req.url.includes('/api/Activity/DoInvitedWheel')
+            req.url.includes('/api/Activity/SpinInvitedWheel')
         );
 
         if (spinRequest) {
@@ -411,12 +495,60 @@ export async function rotateTurntable(page, test, options = {}) {
                 if (result.reward) {
                     console.log(`        🎁 获得奖励:`, result.reward);
                 }
+
+                // 🔥 提取 prizeAmount
+                const prizeAmount = spinRequest.responseBody?.data?.prizeAmount;
+                if (prizeAmount !== undefined) {
+                    console.log(`        💰 本次奖励金额: ${prizeAmount}`);
+                    result.prizeAmount = prizeAmount;
+                }
             }
         } else {
-            console.log(`        ⚠️ 未找到旋转结果接口`);
+            // 🔥 未找到旋转接口 - 报错并截图
+            console.log(`        ❌ 未找到旋转结果接口 /api/Activity/SpinInvitedWheel`);
+            result.error = '未找到旋转结果接口';
+
+            // 截图
+            if (test && test.captureErrorScreenshot) {
+                await test.captureErrorScreenshot('spin-api-not-found', '旋转后未找到 SpinInvitedWheel 接口');
+                console.log('        📸 已截图保存错误现场');
+            }
+
+            // 标记测试失败
+            if (test && test.markPageTestFailed) {
+                test.markPageTestFailed('旋转后未找到 SpinInvitedWheel 接口');
+                console.log('        📝 已记录错误到测试报告');
+            }
+
+            return result;
         }
 
-        // 7. 获取旋转后的剩余次数
+        // 7. 读取页面显示的金额并验证
+        const displayAmount = await page.evaluate(() => {
+            const amountEl = document.querySelector('.scroll_num');
+            if (!amountEl) return null;
+
+            const text = amountEl.textContent || '';
+            const match = text.replace(/[₹,]/g, '').trim();
+            return parseFloat(match) || 0;
+        }).catch(() => null);
+
+        if (displayAmount !== null) {
+            console.log(`        📊 页面显示金额: ${displayAmount}`);
+            result.displayAmount = displayAmount;
+
+            // 对比目标金额
+            const afterCountResult = getWheelRemainCount(test);
+            if (afterCountResult.success) {
+                const targetAmount = afterCountResult.totalPrizeAmount;
+                if (displayAmount >= targetAmount) {
+                    console.log(`        💰 页面显示金额已达到目标 (${displayAmount} >= ${targetAmount})`);
+                    result.reachedTarget = true;
+                }
+            }
+        }
+
+        // 8. 获取旋转后的剩余次数
         if (checkRemainCount) {
             // 等待一下，确保转盘信息接口已更新
             await page.waitForTimeout(500);
@@ -428,7 +560,7 @@ export async function rotateTurntable(page, test, options = {}) {
             }
         }
 
-        // 8. 检查页面上的奖励弹窗（可选）
+        // 9. 检查页面上的奖励弹窗（可选）
         const rewardPopup = page.locator('.reward-popup, .prize-popup, [class*="reward"], [class*="prize"]');
         const popupVisible = await rewardPopup.first().isVisible({ timeout: 2000 }).catch(() => false);
 

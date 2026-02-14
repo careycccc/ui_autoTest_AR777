@@ -329,6 +329,67 @@ async function handleGiftSelection(page, auth) {
 }
 
 /**
+ * 处理 Congratulations 奖励弹窗
+ * 这个弹窗只会出现在邀请转盘页面
+ * @param {Page} page - Playwright page 对象
+ * @returns {Promise<boolean>} 是否成功处理
+ */
+async function handleCongratulationsPopup(page) {
+    try {
+        // 检测是否存在 Congratulations 和 CASH OUT 文本
+        const hasCongrats = await page.getByText('Congratulations')
+            .isVisible({ timeout: 1000 })
+            .catch(() => false);
+
+        const hasCashOut = await page.getByText('CASH OUT')
+            .isVisible({ timeout: 1000 })
+            .catch(() => false);
+
+        if (!hasCongrats || !hasCashOut) {
+            return false; // 不是 Congratulations 弹窗
+        }
+
+        console.log('        🎉 检测到 Congratulations 奖励弹窗');
+
+        // 查找关闭按钮（多种选择器）
+        const closeSelectors = [
+            'img.close[src*="icon_close"]',
+            '.close',
+            'img[class*="close"]',
+            '[data-testid="close"]',
+            '.icon_close'
+        ];
+
+        for (const selector of closeSelectors) {
+            try {
+                const closeBtn = page.locator(selector).first();
+                const visible = await closeBtn.isVisible({ timeout: 1000 }).catch(() => false);
+
+                if (visible) {
+                    await closeBtn.click();
+                    console.log(`        ✓ 点击关闭按钮: ${selector}`);
+                    await page.waitForTimeout(1000);
+                    return true;
+                }
+            } catch (e) {
+                // 继续尝试下一个选择器
+            }
+        }
+
+        // 如果没有找到关闭按钮，尝试点击右上角
+        console.log('        ⚠️ 未找到关闭按钮，尝试点击右上角');
+        const { width, height } = page.viewportSize();
+        await page.mouse.click(width - 30, 30);
+        await page.waitForTimeout(1000);
+        return true;
+
+    } catch (error) {
+        console.log(`        ⚠️ 处理 Congratulations 弹窗失败: ${error.message}`);
+        return false;
+    }
+}
+
+/**
  * 邀请转盘的初始化 - 前置条件
  * 智能识别页面状态并处理
  * 
@@ -344,6 +405,15 @@ export async function turntablePlay(page, test, auth, options = {}) {
 
     try {
         console.log(`        🎯 开始${actionName}...`);
+
+        // 🔥 步骤0: 检查并处理 Congratulations 弹窗（最高优先级）
+        console.log('        🔍 检查 Congratulations 弹窗...');
+        const congratsHandled = await handleCongratulationsPopup(page);
+        if (congratsHandled) {
+            console.log('        ✅ Congratulations 弹窗已处理');
+            // 等待弹窗关闭动画完成
+            await page.waitForTimeout(1000);
+        }
 
         // 🔥 步骤1: 识别页面状态
         const state = await detectTurntableState(page);
@@ -443,7 +513,7 @@ export async function turntablePlay(page, test, auth, options = {}) {
 
             // 🔥 1. 先截图
             if (test && test.captureErrorScreenshot) {
-                await test.captureErrorScreenshot('canvas-load-failed');
+                await test.captureErrorScreenshot('canvas-load-failed', errorMsg);
                 console.log('        📸 已截图保存错误现场');
             }
 
@@ -476,7 +546,7 @@ export async function turntablePlay(page, test, auth, options = {}) {
 
                 // 🔥 再次截图和记录错误
                 if (test && test.captureErrorScreenshot) {
-                    await test.captureErrorScreenshot('canvas-load-failed-retry');
+                    await test.captureErrorScreenshot('canvas-load-failed-retry', retryError);
                 }
                 if (test && test.markPageTestFailed) {
                     test.markPageTestFailed(`刷新后${retryError}`);

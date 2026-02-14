@@ -87,7 +87,7 @@ export async function tarbarComponentsRegester(test) {
             waitTime: 2000,
             collectPreviousPage: true,
 
-            onEnter: async (page, auth) => {
+            onEnter: async (page, auth, test) => {
                 // 🔥 最简化版本：只检查 URL，不处理任何弹窗
                 await auth.safeWait(1500);
 
@@ -100,6 +100,20 @@ export async function tarbarComponentsRegester(test) {
                 }
 
                 console.log(`      ✅ 确认在转盘页面`);
+
+                // 🔥 检查是否需要执行旋转用例
+                const { shouldRotateTurntable } = await import('../../scenarios/turntable/turntable-rotate.js');
+                const checkResult = await shouldRotateTurntable(page, test);
+
+                // 将结果保存到 auth 对象，供后续用例使用
+                auth.turntableShouldRotate = checkResult.shouldRotate;
+                auth.turntableCheckReason = checkResult.reason;
+
+                if (!checkResult.shouldRotate) {
+                    console.log(`      ℹ️ 无需执行旋转用例: ${checkResult.reason}`);
+                } else {
+                    console.log(`      ✅ 可以执行旋转用例`);
+                }
             },
 
             onLeave: async (page, auth) => {

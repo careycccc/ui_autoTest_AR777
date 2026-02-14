@@ -2,6 +2,7 @@
  * 邀请相关功能
  */
 import { clickIfTextExists, handleFailure, handleTelegramJump, swipePage } from '../utils.js';
+import { verifyInvitePage } from '../common/invite-verification.js';
 
 /**
  * 🔥 辅助函数：确保在 Invite Rewards tab
@@ -105,43 +106,20 @@ export async function earnInviteLink(page, test) {
             collectPreviousPage: true,
         });
 
-        // 等待页面稳定
-        await page.waitForTimeout(1000);
-
         // 检查页面是否仍然打开
         if (page.isClosed()) {
             return await handleFailure(test, '进入新版返佣的邀请界面的页面在切换后关闭了');
         }
 
-        // 进行页面的完整性判断
-        const inviteCodeElement = page.locator('.invite .code span');
-        const codeVisible = await inviteCodeElement.isVisible({ timeout: 3000 }).catch(() => false);
-
-        if (!codeVisible) {
-            return await handleFailure(test, '新版返佣的邀请界面邀请码元素不可见');
-        }
-
-        const inviteCode = await inviteCodeElement.innerText();
-
-        if (!inviteCode || inviteCode.trim() === '') {
-            return await handleFailure(test, '新版返佣的邀请界面邀请码为空，页面数据异常', { throwError: true });
-        } else {
-            console.log(`        ✅ 新版返佣的邀请界面邀请码: ${inviteCode}`);
-        }
-
-        // 使用封装的 Telegram 跳转函数
-        const jumpResult = await handleTelegramJump(page, '.share-icons', {
-            telegramText: 'Telegram',
-            jumpTimeout: 5000,
-            waitAfterBack: 1000,
-            verifyReturn: true,
-            name: '新版返佣->邀请链接->Telegram'
+        // 🔥 使用公共验证逻辑
+        const verifyResult = await verifyInvitePage(page, test, {
+            name: '新版返佣的邀请界面',
+            verifyTelegram: true,
+            verifyClipboard: true  // 验证粘贴板
         });
 
-        if (!jumpResult.success) {
-            console.log(`        ⚠️ 新版返佣的邀请界面Telegram 跳转验证失败: ${jumpResult.error || '未知错误'}`);
-            // 邀请码验证成功，只是跳转功能不可用
-            return true;
+        if (!verifyResult.success) {
+            return await handleFailure(test, `新版返佣的邀请界面验证失败: ${verifyResult.error}`, { throwError: true });
         }
 
         return true;
@@ -340,7 +318,7 @@ export async function earnInviteRewardsGoToAttend(page, test, options = {}) {
         // 🔥 等待路由更新
         await page.waitForTimeout(500);
 
-        // 🔥 进入到了邀请界面（复用 earnInviteLink 的验证逻辑）
+        // 🔥 进入到了邀请界面（复用公共验证逻辑）
         const isInviteLinkview = await test.switchToPage('进入邀请界面（从Go To Attend）', {
             waitForSelector: 'text=Share',
             waitTime: 1000,
@@ -351,23 +329,15 @@ export async function earnInviteRewardsGoToAttend(page, test, options = {}) {
             return await handleFailure(test, 'Go To Attend->邀请界面->页面切换失败');
         }
 
-        // 🔥 验证邀请码（与 earnInviteLink 相同的逻辑）
-        await page.waitForTimeout(1000);
+        // 🔥 使用公共验证逻辑
+        const verifyResult = await verifyInvitePage(page, test, {
+            name: 'Go To Attend->邀请界面',
+            verifyTelegram: false,  // 这里不验证 Telegram
+            verifyClipboard: true   // 验证粘贴板
+        });
 
-        // 进行页面的完整性判断
-        const inviteCodeElement = page.locator('.invite .code span');
-        const codeVisible = await inviteCodeElement.isVisible({ timeout: 3000 }).catch(() => false);
-
-        if (!codeVisible) {
-            return await handleFailure(test, 'Go To Attend->邀请码元素不可见');
-        }
-
-        const inviteCode = await inviteCodeElement.innerText();
-
-        if (!inviteCode || inviteCode.trim() === '') {
-            return await handleFailure(test, 'Go To Attend->邀请码为空，页面数据异常', { throwError: true });
-        } else {
-            console.log(`        ✅ 邀请码: ${inviteCode}`);
+        if (!verifyResult.success) {
+            return await handleFailure(test, `Go To Attend->邀请界面验证失败: ${verifyResult.error}`, { throwError: true });
         }
 
         return true;

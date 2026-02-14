@@ -304,7 +304,7 @@ export class TestCase {
   /**
    * 🔥 新增：捕获错误截图
    */
-  async captureErrorScreenshot(errorName = 'error') {
+  async captureErrorScreenshot(errorName = 'error', errorReason = '') {
     if (this.currentPageRecord && !this.currentPageRecord.errorScreenshotTaken) {
       try {
         const safeName = errorName.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-\u4e00-\u9fa5]/g, '');
@@ -315,7 +315,8 @@ export class TestCase {
           name: `错误截图 - ${errorName}`,
           path: screenshot,
           timestamp: new Date().toISOString(),
-          isError: true
+          isError: true,
+          errorReason: errorReason || errorName  // 🔥 保存错误原因
         });
 
         this.currentPageRecord.errorScreenshotTaken = true;

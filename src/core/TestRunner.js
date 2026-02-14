@@ -81,7 +81,8 @@ export class TestRunner {
         viewport: device.viewport,
         deviceScaleFactor: device.deviceScaleFactor || 1,
         isMobile: device.isMobile || false,
-        hasTouch: device.hasTouch || false
+        hasTouch: device.hasTouch || false,
+        permissions: ['clipboard-read', 'clipboard-write']  // 🔥 授予剪贴板权限
       };
       if (device.userAgent) contextOptions.userAgent = device.userAgent;
 

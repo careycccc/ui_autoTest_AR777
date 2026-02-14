@@ -457,9 +457,9 @@ export class HTMLReporter {
     .error-panel pre { background: #1f2937; color: #f9fafb; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 11px; margin-top: 6px; }
     .screenshots-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
     .screenshot-card { border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
-    .screenshot-img-wrapper { position: relative; background: #f3f4f6; min-height: 180px; }
-    .screenshot-card img { width: 100%; height: auto; display: block; }
-    .screenshot-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 180px; color: #9ca3af; }
+    .screenshot-img-wrapper { position: relative; background: #f3f4f6; min-height: 600px; display: flex; align-items: center; justify-content: center; }
+    .screenshot-card img { width: 300px; height: 600px; object-fit: contain; display: block; margin: 0 auto; }
+    .screenshot-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 600px; color: #9ca3af; }
     .screenshot-info { padding: 12px; background: #f9fafb; }
     .screenshot-name { font-weight: 600; color: #374151; font-size: 13px; }
     .screenshot-time { font-size: 11px; color: #6b7280; margin-top: 2px; }
@@ -490,7 +490,8 @@ export class HTMLReporter {
     .console-error-stack pre { margin-top: 8px; background: #1f2937; color: #f9fafb; padding: 12px; border-radius: 4px; overflow-x: auto; font-size: 11px; line-height: 1.5; }
     .console-error-screenshot { margin-top: 12px; }
     .console-error-screenshot-label { font-size: 12px; color: #6b7280; font-weight: 600; margin-bottom: 8px; }
-    .console-error-screenshot img { max-width: 100%; border: 1px solid #e5e7eb; border-radius: 4px; }
+    .console-error-screenshot img { width: 300px; height: 600px; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb; }
+    .console-error-reason { margin-top: 8px; padding: 8px 12px; background: #fef2f2; color: #991b1b; font-size: 12px; border-radius: 4px; border-left: 3px solid #dc2626; }
     .console-error-duplicate { opacity: 0.7; }
     .console-error-duplicate-badge { display: inline-block; padding: 2px 8px; background: #fbbf24; color: #78350f; font-size: 10px; font-weight: 600; border-radius: 12px; margin-left: 8px; }
     .console-error-no-screenshot { margin-top: 12px; padding: 8px 12px; background: #fef3c7; color: #92400e; font-size: 12px; border-radius: 4px; }
@@ -969,7 +970,29 @@ export class HTMLReporter {
 
   renderScreenshot(ss) {
     const base64 = this.imageToBase64(ss.path);
-    return '<div class="screenshot-card"><div class="screenshot-img-wrapper">' + (base64 ? '<img src="' + base64 + '" alt="' + ss.name + '" loading="lazy">' : '<div class="screenshot-placeholder"><div style="font-size:40px;">📷</div><div>图片加载失败</div></div>') + '</div><div class="screenshot-info"><div class="screenshot-name">' + ss.name + '</div><div class="screenshot-time">' + (ss.timestamp ? new Date(ss.timestamp).toLocaleString('zh-CN') : '') + '</div></div></div>';
+
+    // 🔥 统一的图片样式：300x600，等比缩放，内容完整
+    const imgStyle = 'width: 300px; height: 600px; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb;';
+
+    // 🔥 如果是错误截图，使用特殊样式
+    if (ss.isError) {
+      const imgHtml = base64
+        ? '<img src="' + base64 + '" alt="' + ss.name + '" loading="lazy" style="' + imgStyle + '">'
+        : '<div class="screenshot-placeholder" style="height: 600px;"><div style="font-size:40px;">📷</div><div>图片加载失败</div></div>';
+
+      const errorReasonHtml = ss.errorReason
+        ? '<div class="screenshot-error-reason" style="margin-top: 8px; padding: 8px 12px; background: #fef2f2; color: #991b1b; font-size: 12px; border-radius: 4px; border-left: 3px solid #dc2626;"><strong>错误原因:</strong> ' + this.escapeHtml(ss.errorReason) + '</div>'
+        : '';
+
+      return '<div class="screenshot-card" style="border-color: #dc2626;"><div class="screenshot-img-wrapper">' + imgHtml + errorReasonHtml + '</div><div class="screenshot-info" style="background: #fef2f2;"><div class="screenshot-name" style="color: #991b1b;">❌ ' + ss.name + '</div><div class="screenshot-time">' + (ss.timestamp ? new Date(ss.timestamp).toLocaleString('zh-CN') : '') + '</div></div></div>';
+    }
+
+    // 🔥 普通截图：同样使用 300x600 尺寸
+    const normalImgHtml = base64
+      ? '<img src="' + base64 + '" alt="' + ss.name + '" loading="lazy" style="' + imgStyle + '">'
+      : '<div class="screenshot-placeholder" style="height: 600px;"><div style="font-size:40px;">📷</div><div>图片加载失败</div></div>';
+
+    return '<div class="screenshot-card"><div class="screenshot-img-wrapper">' + normalImgHtml + '</div><div class="screenshot-info"><div class="screenshot-name">' + ss.name + '</div><div class="screenshot-time">' + (ss.timestamp ? new Date(ss.timestamp).toLocaleString('zh-CN') : '') + '</div></div></div>';
   }
 
   renderConsoleErrors(errors) {
@@ -1030,7 +1053,15 @@ export class HTMLReporter {
       if (base64) {
         html += '<div class="console-error-screenshot">';
         html += '<div class="console-error-screenshot-label">📸 错误截图:</div>';
-        html += '<img src="' + base64 + '" alt="错误截图" loading="lazy">';
+        // 🔥 固定尺寸 300x600，等比缩放
+        html += '<img src="' + base64 + '" alt="错误截图" loading="lazy" style="width: 300px; height: 600px; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb;">';
+        // 🔥 显示错误原因
+        html += '<div class="console-error-reason" style="margin-top: 8px; padding: 8px 12px; background: #fef2f2; color: #991b1b; font-size: 12px; border-radius: 4px; border-left: 3px solid #dc2626;">';
+        html += '<strong>错误原因:</strong> ' + this.escapeHtml(error.message || '未知错误');
+        if (error.location) {
+          html += '<br><strong>位置:</strong> ' + this.escapeHtml(error.location);
+        }
+        html += '</div>';
         html += '</div>';
       }
     } else if (error.isDuplicate) {
