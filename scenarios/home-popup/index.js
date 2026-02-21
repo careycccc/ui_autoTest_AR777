@@ -20,6 +20,7 @@ import { handleVIPPopup } from './vip.js';
 import { handleSuperJackpotPopup } from './super-jackpot.js';
 import { handleCouponsPopup } from './coupons.js';
 import { handleWithdrawPopup } from './withdraw.js';
+import { handleRechargeDialogPopup } from './recharge-dialog.js';
 
 /**
  * 根据断言文本获取对应的处理函数
@@ -45,6 +46,7 @@ export function getPopupHandler(assertText) {
         'Super Jackpot': handleSuperJackpotPopup,
         'Coupons': handleCouponsPopup,
         'Withdraw': handleWithdrawPopup,
+        'Pay For The Order': handleRechargeDialogPopup,
 
         // 父用例页面，无需处理（已有专门的测试用例）
         'Promotions': null,      // 周卡月卡 - 活动资讯父用例
@@ -97,5 +99,6 @@ export {
     handleVIPPopup,
     handleSuperJackpotPopup,
     handleCouponsPopup,
-    handleWithdrawPopup
+    handleWithdrawPopup,
+    handleRechargeDialogPopup
 };

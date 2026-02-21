@@ -695,6 +695,25 @@ export class AuthHelper {
             const afterUrl = this.page.url();
             console.log(`        📍 点击后 URL: ${afterUrl}`);
 
+            // 🔥 检测是否出现充值支付弹窗（在判断路由变化之前）
+            try {
+                const { detectRechargeDialog, handleRechargeDialogPopup } = await import('../../scenarios/home-popup/recharge-dialog.js');
+                const hasRechargeDialog = await detectRechargeDialog(this.page);
+
+                if (hasRechargeDialog) {
+                    console.log(`        💳 检测到充值支付弹窗，处理中...`);
+                    const result = await handleRechargeDialogPopup(this.page, this, this.t);
+
+                    if (result.success) {
+                        console.log(`        ✅ 充值支付弹窗处理完成`);
+                    } else {
+                        console.log(`        ⚠️ 充值支付弹窗处理失败: ${result.error || result.reason}`);
+                    }
+                }
+            } catch (rechargeError) {
+                console.log(`        ⚠️ 充值支付弹窗检测失败: ${rechargeError.message}`);
+            }
+
             // 2. 判断是否发生了路由跳转
             const urlChanged = afterUrl !== beforeUrl;
             console.log(`        📊 路由是否变化: ${urlChanged ? '是' : '否'}`);
@@ -987,6 +1006,26 @@ export class AuthHelper {
             // 🔥 记录点击后的 URL
             const afterUrl = this.page.url();
             console.log(`        📍 点击后 URL: ${afterUrl}`);
+
+            // 🔥 检测是否出现充值支付弹窗（在判断路由变化之前）
+            try {
+                const { detectRechargeDialog, handleRechargeDialogPopup } = await import('../../scenarios/home-popup/recharge-dialog.js');
+                const hasRechargeDialog = await detectRechargeDialog(this.page);
+
+                if (hasRechargeDialog) {
+                    console.log(`        💳 检测到充值支付弹窗，处理中...`);
+                    const result = await handleRechargeDialogPopup(this.page, this, this.t);
+
+                    if (result.success) {
+                        console.log(`        ✅ 充值支付弹窗处理完成`);
+                        return true;
+                    } else {
+                        console.log(`        ⚠️ 充值支付弹窗处理失败: ${result.error || result.reason}`);
+                    }
+                }
+            } catch (rechargeError) {
+                console.log(`        ⚠️ 充值支付弹窗检测失败: ${rechargeError.message}`);
+            }
 
             // 2. 检查是否跳转到了子页面
             const subPage = await this._detectCurrentPage();

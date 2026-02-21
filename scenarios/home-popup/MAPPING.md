@@ -22,6 +22,7 @@
 | 优惠券 | Coupons | handleCouponsPopup | 优惠券页面 |
 | 礼品码 | Home | null | 父用例（首页） |
 | 提现 | Withdraw | handleWithdrawPopup | 提现页面 |
+| 充值支付 | Pay For The Order | handleRechargeDialogPopup | 充值支付对话框（特殊处理） |
 
 ## 特殊处理说明
 
@@ -50,6 +51,38 @@ selector = 'text=/UID/i';  // 不区分大小写，只要包含 UID 即可
 
 这两个不同的 jumpPageText 都映射到 Home，因为它们都跳转到首页。
 
+### 4. 充值支付弹窗特殊处理
+**弹窗类型**: 充值支付对话框 (Pay For The Order)  
+**触发方式**: 点击首页弹窗后弹出的二级弹窗  
+**处理方式**: 自动检测并点击关闭按钮
+
+这个弹窗不是通过页面跳转触发的，而是在点击首页弹窗图片后直接弹出的对话框。系统会在点击弹窗图片后自动检测是否出现充值支付弹窗，如果出现则自动点击关闭按钮。
+
+弹窗结构：
+```html
+<div class="dialog-overlay recharge-dialog">
+  <div class="dialog-container">
+    <div class="dialog-header">
+      <h3 class="dialogTitle">Pay For The Order</h3>
+    </div>
+    <div class="dialog-content">
+      <section class="payment-dialog">
+        <h2 class="amount-title">₹100</h2>
+        <ul>支付方式列表</ul>
+        <div class="confirmBtn">Confirm</div>
+      </section>
+    </div>
+    <span class="ar_icon close-btn">关闭按钮</span>
+  </div>
+</div>
+```
+
+处理逻辑：
+1. 点击首页弹窗图片后，自动检测是否出现 `.dialog-overlay.recharge-dialog`
+2. 如果检测到，点击 `.close-btn` 关闭按钮
+3. 验证弹窗已关闭
+4. 继续处理后续流程
+
 ## 文件结构
 
 ```
@@ -69,6 +102,7 @@ scenarios/home-popup/
 ├── super-jackpot.js              # 超级大奖
 ├── coupons.js                    # 优惠券
 ├── withdraw.js                   # 提现
+├── recharge-dialog.js            # 充值支付对话框（特殊处理）
 ├── MAPPING.md                    # 本文档
 └── README.md                     # 使用文档
 ```
@@ -113,7 +147,28 @@ const exists = await page.locator(selector).first().isVisible({ timeout: 2000 })
 ✅ 活动页面处理完成
 ```
 
-### 父用例页面
+### 充值支付弹窗（特殊）
+```
+🔍 开始检查首页弹窗（最多 20 次）...
+📊 获取到 2 个弹窗配置
+✓ 通过选择器 ".popup-content" 检测到弹窗
+🎁 第1次检查：发现第1个弹窗，处理中...
+📋 使用配置数据处理弹窗 1/2
+📋 弹窗标题: 充值100送22
+📋 跳转页面: 无
+📍 点击前 URL: https://example.com/home
+🖼️ 点击弹窗图片 (.popup_img)...
+💳 检测到充值支付弹窗，处理中...
+🎯 处理充值支付弹窗...
+✓ 通过选择器 ".dialog-overlay.recharge-dialog" 检测到充值支付弹窗
+🖱️ 点击关闭按钮 (.close-btn)...
+✓ 已点击关闭按钮
+✅ 充值支付弹窗已关闭
+✅ 充值支付弹窗处理完成
+📍 点击后 URL: https://example.com/home
+📊 路由是否变化: 否
+✅ 弹窗已关闭（路由未变化）
+```
 ```
 📋 跳转页面: 周卡月卡
 ✓ 映射断言文本: Promotions
