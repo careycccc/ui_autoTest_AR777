@@ -804,18 +804,45 @@ export class testModule {
             this.test.currentTabName = null;
             this.test.currentCaseName = null;
 
-            // 🔥 修改：父用例执行完毕后停留在父用例页面，不返回首页
-            console.log(`      📍 父用例 "${tabName}" 执行完毕，停留在当前页面`);
-            console.log(`      🔗 当前 URL: ${this.page.url()}`);
+            // 🔥 父用例执行完毕后强制导航回首页
+            console.log(`      ✅ 父用例 "${tabName}" 执行完毕`);
+            console.log(`      🏠 强制导航回首页...`);
 
-            // 🔥 检查并处理首页弹窗（如果当前在首页）
-            const currentUrl = this.page.url();
-            const urlPath = new URL(currentUrl).pathname;
-            const isOnHome = urlPath === '/' || urlPath === '';
+            try {
+                const homeUrl = 'https://arplatsaassit4.club/';
+                const currentUrl = this.page.url();
 
-            if (isOnHome) {
-                console.log(`      📍 当前在首页，检查弹窗...`);
-                await this.auth.checkAndHandleHomePopups(20).catch(() => { });
+                // 如果不在首页，导航到首页
+                if (!currentUrl.startsWith(homeUrl)) {
+                    await this.page.goto(homeUrl, {
+                        waitUntil: 'domcontentloaded',
+                        timeout: 30000
+                    });
+                    console.log(`      ✅ 已导航到首页: ${homeUrl}`);
+                } else {
+                    console.log(`      ℹ️ 已在首页，无需导航`);
+                }
+
+                // 等待页面稳定
+                await this.auth.safeWait(2000);
+
+                // 检查并处理首页弹窗
+                console.log(`      🔍 检查首页弹窗...`);
+                await this.auth.checkAndHandleHomePopups(20).catch(() => {
+                    console.log(`      ⚠️ 处理首页弹窗时出错，继续执行`);
+                });
+
+                console.log(`      ✅ 首页准备完毕，可以执行下一个父用例`);
+
+            } catch (error) {
+                console.log(`      ⚠️ 导航回首页失败: ${error.message}`);
+                // 尝试备用方案：使用 _ensureOnHomePage
+                try {
+                    await this.auth._ensureOnHomePage();
+                    console.log(`      ✅ 使用备用方案成功回到首页`);
+                } catch (e) {
+                    console.log(`      ❌ 备用方案也失败: ${e.message}`);
+                }
             }
 
             await this.auth.safeWait(1000);

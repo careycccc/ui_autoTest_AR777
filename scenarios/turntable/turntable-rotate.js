@@ -1,5 +1,47 @@
 import { handleFailure } from '../utils.js';
 import { getApiResponseData, getApiResponses } from '../utils.js';
+import { CanvasAccessibilityOverlay } from '../../src/utils/CanvasAccessibilityOverlay.js';
+
+// 全局存储无障碍层实例
+let canvasOverlay = null;
+
+/**
+ * 初始化 Canvas 无障碍层
+ * @param {Page} page - Playwright page 对象
+ * @param {string} canvasSelector - Canvas 选择器
+ * @param {Object} options - 配置选项
+ * @returns {Promise<CanvasAccessibilityOverlay>}
+ */
+export async function initCanvasAccessibility(page, canvasSelector = '#turntable_canvas canvas', options = {}) {
+    if (!canvasOverlay) {
+        canvasOverlay = new CanvasAccessibilityOverlay(page);
+        await canvasOverlay.inject(canvasSelector, {
+            updateInterval: 2000,
+            debug: options.debug || false
+        });
+        console.log('        ✅ Canvas 无障碍层已初始化');
+    }
+    return canvasOverlay;
+}
+
+/**
+ * 获取 Canvas 无障碍层实例
+ * @returns {CanvasAccessibilityOverlay|null}
+ */
+export function getCanvasOverlay() {
+    return canvasOverlay;
+}
+
+/**
+ * 清理 Canvas 无障碍层
+ */
+export async function cleanupCanvasAccessibility() {
+    if (canvasOverlay) {
+        await canvasOverlay.cleanup();
+        canvasOverlay = null;
+        console.log('        🧹 Canvas 无障碍层已清理');
+    }
+}
 
 /**
  * 检查是否需要执行转盘旋转
@@ -208,7 +250,9 @@ export async function clickCanvasArea(page, options = {}) {
         canvasSelector = '#turntable_canvas canvas',
         ratio = 0.86,
         position = 'bottom',
-        angle = null
+        angle = null,
+        useAccessibility = false,  // 🔥 是否使用无障碍层
+        targetText = null  // 🔥 使用无障碍层时，要点击的目标文本
     } = options;
 
     const result = {
@@ -217,10 +261,37 @@ export async function clickCanvasArea(page, options = {}) {
         clickY: 0,
         absoluteX: 0,
         absoluteY: 0,
-        error: null
+        error: null,
+        method: useAccessibility ? 'accessibility' : 'coordinate'
     };
 
     try {
+        // 🔥 如果启用无障碍层且指定了目标文本，使用无障碍层点击
+        if (useAccessibility && targetText && canvasOverlay) {
+            console.log(`        🎯 使用无障碍层点击目标: "${targetText}"`);
+
+            // 刷新覆盖层以获取最新元素
+            await canvasOverlay.refreshOverlay();
+            await page.waitForTimeout(500);
+
+            // 查找目标元素
+            const element = await canvasOverlay.findElementByText(targetText);
+            if (!element) {
+                console.log(`        ⚠️ 无障碍层未找到目标 "${targetText}"，回退到坐标点击`);
+                // 回退到坐标点击
+            } else {
+                // 使用无障碍层点击
+                const clicked = await canvasOverlay.clickElementByText(targetText);
+                if (clicked) {
+                    result.success = true;
+                    result.method = 'accessibility';
+                    console.log(`        ✅ 已通过无障碍层点击目标 "${targetText}"`);
+                    return result;
+                }
+            }
+        }
+
+        // 🔥 坐标点击方式（原有逻辑）
         console.log(`        🎯 准备点击 Canvas 区域 (${position})...`);
 
         // 🔥 优先使用精确的选择器
@@ -387,7 +458,9 @@ export async function rotateTurntable(page, test, options = {}) {
         position = 'x2',  // 默认点击 X2 红色圆圈中心区域
         angle = null,
         checkRemainCount = true,
-        animationWait = 3000
+        animationWait = 3000,
+        useAccessibility = false,  // 🔥 是否使用无障碍层
+        initAccessibility = false  // 🔥 是否初始化无障碍层
     } = options;
 
     const result = {
@@ -403,6 +476,11 @@ export async function rotateTurntable(page, test, options = {}) {
 
     try {
         console.log('        🎰 开始转盘旋转...');
+
+        // 🔥 如果需要，初始化无障碍层
+        if (initAccessibility && !canvasOverlay) {
+            await initCanvasAccessibility(page, canvasSelector, { debug: false });
+        }
 
         // 1. 检查剩余次数（如果需要）
         if (checkRemainCount) {
@@ -447,7 +525,9 @@ export async function rotateTurntable(page, test, options = {}) {
             canvasSelector,
             ratio,
             position,
-            angle
+            angle,
+            useAccessibility,
+            targetText: useAccessibility ? 'X' : null  // 如果使用无障碍层，查找包含 X 的文本（如 X2, X3, X5）
         });
 
         if (!clickResult.success) {
@@ -598,12 +678,35 @@ export async function rotateTurntable(page, test, options = {}) {
         }
 
         if (isCashOutPageVisible && cashOutButton) {
-            console.log('        🎉 检测到奖励页面（Congratulations），准备点击 CASH OUT...');
+            console.log('        🎉 检测到奖励页面（Congratulations），页面正在自动跳转...');
             result.reachedCashOutPage = true;
+
+            // 🔥 页面自动跳转需要时间，等待页面完全稳定后再操作
+            // 等待 5 秒确保页面跳转完成且数据加载完毕
+            console.log('        ⏳ 等待 5 秒让页面完全稳定（自动跳转 + 数据加载）...');
+            await page.waitForTimeout(5000);
+
+            // 重新查找 CASH OUT 按钮（因为页面可能已经跳转）
+            let finalCashOutButton = null;
+            for (const selector of cashOutButtonSelectors) {
+                const btn = page.locator(selector).first();
+                const isVisible = await btn.isVisible({ timeout: 2000 }).catch(() => false);
+
+                if (isVisible) {
+                    finalCashOutButton = btn;
+                    console.log(`        ✅ 页面稳定后重新找到 CASH OUT 按钮 (选择器: ${selector})`);
+                    break;
+                }
+            }
+
+            if (!finalCashOutButton) {
+                console.log('        ⚠️ 页面跳转后未找到 CASH OUT 按钮，可能已经在其他页面');
+                return result;
+            }
 
             // 点击 CASH OUT 按钮
             try {
-                await cashOutButton.click();
+                await finalCashOutButton.click();
                 console.log('        ✅ 已点击 CASH OUT 按钮');
                 result.cashOutClicked = true;
 
@@ -690,7 +793,7 @@ function extractRewardInfo(responseData) {
 export async function spinUntilEmpty(page, test, options = {}) {
     const {
         maxSpins = 10,
-        delayBetweenSpins = 1000,
+        delayBetweenSpins = 3000,  // 🔥 默认等待 3 秒
         ...rotateOptions
     } = options;
 
@@ -727,6 +830,10 @@ export async function spinUntilEmpty(page, test, options = {}) {
                     console.log(`        ✅ 完成 ${result.totalSpins} 次旋转，次数已用完`);
                     result.success = true;
                     break;
+                } else if (spinResult.error === '已达到总奖金金额，应该点击 CASH OUT') {
+                    console.log(`        💰 已达到总奖金金额，停止旋转`);
+                    result.success = true;
+                    break;
                 } else {
                     result.error = spinResult.error;
                     console.log(`        ❌ 旋转失败: ${spinResult.error}`);
@@ -735,14 +842,25 @@ export async function spinUntilEmpty(page, test, options = {}) {
             }
 
             result.totalSpins++;
+            console.log(`        ✅ 第 ${result.totalSpins} 次旋转成功`);
 
             if (spinResult.reward) {
                 result.rewards.push(spinResult.reward);
                 console.log(`        🎁 第 ${result.totalSpins} 次奖励:`, spinResult.reward);
             }
 
-            // 等待一下再继续
+            // 🔥 如果已经点击了 CASH OUT，停止循环
+            if (spinResult.cashOutClicked) {
+                console.log(`        🎉 已跳转到奖励页面（Congratulations）`);
+                console.log(`        ✅ CASH OUT 按钮已点击`);
+                result.success = true;
+                result.cashOutClicked = true;
+                break;
+            }
+
+            // 等待一下再继续（每次旋转后都需要等待 3 秒）
             if (i < maxSpins - 1 && delayBetweenSpins > 0) {
+                console.log(`        ⏳ 等待 ${delayBetweenSpins}ms 后继续...`);
                 await page.waitForTimeout(delayBetweenSpins);
             }
         }

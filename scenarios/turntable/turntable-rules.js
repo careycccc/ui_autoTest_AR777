@@ -95,63 +95,94 @@ export async function checkRulesDialog(page, auth, test) {
         console.log('        ⏳ 步骤3: 等待 2 秒...');
         await page.waitForTimeout(2000);
 
-        // 步骤4: 点击弹窗中的关闭按钮（或 Rules 标题区域）
+        // 步骤4: 点击 Confirm 按钮关闭规则弹窗
         console.log('        🔍 步骤4: 关闭规则弹窗...');
 
-        // 尝试多种关闭方式
-        const closeStrategies = [
-            {
-                name: '关闭按钮',
-                selectors: [
-                    '.dialog-close',
-                    '.close-btn',
-                    '[data-testid="close"]',
-                    '.ar_icon.close',
-                    'button:has-text("Close")',
-                    'button:has-text("×")'
-                ]
-            },
-            {
-                name: '点击遮罩层',
-                selectors: [
-                    '.dialog-overlay',
-                    '.modal-overlay',
-                    '.van-overlay'
-                ]
-            }
+        // 🔥 优先点击 Confirm 按钮（不要点击左上角返回按钮）
+        const confirmButtonSelectors = [
+            'button:has-text("Confirm")',
+            '.subBtn:has-text("Confirm")',
+            '.btn_main_style:has-text("Confirm")',
+            'button.subBtn.btn_main_style',
+            '.dialog-footer button:has-text("Confirm")',
+            'button[class*="btn"]:has-text("Confirm")'
         ];
 
         let dialogClosed = false;
 
-        for (const strategy of closeStrategies) {
-            if (dialogClosed) break;
+        for (const selector of confirmButtonSelectors) {
+            try {
+                const confirmBtn = page.locator(selector).first();
+                const visible = await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false);
 
-            for (const selector of strategy.selectors) {
-                try {
-                    const closeEl = page.locator(selector).first();
-                    const visible = await closeEl.isVisible({ timeout: 1000 }).catch(() => false);
+                if (visible) {
+                    await confirmBtn.click();
+                    console.log(`        ✓ 已点击 Confirm 按钮: ${selector}`);
+                    dialogClosed = true;
+                    break;
+                }
+            } catch (e) {
+                // 继续尝试下一个选择器
+            }
+        }
 
-                    if (visible) {
-                        await closeEl.click();
-                        console.log(`        ✓ 通过 ${strategy.name} 关闭弹窗: ${selector}`);
-                        dialogClosed = true;
-                        break;
+        // 如果没有找到 Confirm 按钮，尝试其他关闭方式
+        if (!dialogClosed) {
+            console.log('        ⚠️ 未找到 Confirm 按钮，尝试其他关闭方式...');
+
+            const fallbackStrategies = [
+                {
+                    name: '关闭按钮',
+                    selectors: [
+                        '.dialog-close',
+                        '.close-btn',
+                        '[data-testid="close"]',
+                        '.ar_icon.close',
+                        'button:has-text("Close")',
+                        'button:has-text("×")'
+                    ]
+                },
+                {
+                    name: '点击遮罩层',
+                    selectors: [
+                        '.dialog-overlay',
+                        '.modal-overlay',
+                        '.van-overlay'
+                    ]
+                }
+            ];
+
+            for (const strategy of fallbackStrategies) {
+                if (dialogClosed) break;
+
+                for (const selector of strategy.selectors) {
+                    try {
+                        const closeEl = page.locator(selector).first();
+                        const visible = await closeEl.isVisible({ timeout: 1000 }).catch(() => false);
+
+                        if (visible) {
+                            await closeEl.click();
+                            console.log(`        ✓ 通过 ${strategy.name} 关闭弹窗: ${selector}`);
+                            dialogClosed = true;
+                            break;
+                        }
+                    } catch (e) {
+                        // 继续尝试下一个选择器
                     }
-                } catch (e) {
-                    // 继续尝试下一个选择器
                 }
             }
         }
 
-        // 如果没有找到关闭按钮，尝试按 ESC 键
+        // 如果还是没有关闭，尝试按 ESC 键
         if (!dialogClosed) {
-            console.log('        ⚠️ 未找到关闭按钮，尝试按 ESC 键...');
+            console.log('        ⚠️ 未找到任何关闭方式，尝试按 ESC 键...');
             await page.keyboard.press('Escape');
             dialogClosed = true;
         }
 
-        // 等待弹窗关闭
-        await page.waitForTimeout(1000);
+        // 🔥 点击后等待 2 秒，避免连续快速点击导致问题
+        console.log('        ⏳ 等待 2 秒让页面稳定...');
+        await page.waitForTimeout(2000);
 
         // 验证弹窗是否已关闭
         const stillVisible = await page.locator('h3.dialogTitle:has-text("Rules")')

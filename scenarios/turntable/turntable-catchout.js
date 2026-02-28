@@ -243,7 +243,7 @@ async function handleCashOutConfirmDialog(page, auth) {
     const turnoverMatch = playCodeText.match(/(\d+)x?\s*turnover|(\d+)\s*倍/i);
     const turnoverMultiple = turnoverMatch ? (turnoverMatch[1] || turnoverMatch[2]) : 'unknown';
     if (turnoverMultiple !== 'unknown') {
-        console.log(`      � 流水倍数: ${turnoverMultiple}x`);
+        console.log(`      📊 流水倍数: ${turnoverMultiple}x`);
     }
 
     // 检查按钮（使用模糊匹配）
@@ -263,28 +263,96 @@ async function handleCashOutConfirmDialog(page, auth) {
         }
         console.log(`      ⚠️ 使用通用按钮选择器 (找到 ${btnCount} 个按钮)`);
 
-        // 点击第一个按钮（通常是取消）
-        await anyFooterBtns.first().click();
-        await auth.safeWait(500);
+        // 🔥 点击 Confirm 按钮（第二个按钮）
+        await anyFooterBtns.nth(1).click();
+        console.log('      🖱️ 已点击 Confirm 按钮');
+        await auth.safeWait(2000);
     } else {
         console.log('      ✅ 验证通过: 确认提现弹窗');
 
-        // 点击 Cancel 关闭弹窗
-        if (isCancelVisible) {
-            await cancelBtn.click();
+        // 🔥 点击 Confirm 按钮
+        if (isConfirmVisible) {
+            await confirmBtn.click();
+            console.log('      🖱️ 已点击 Confirm 按钮');
+            await auth.safeWait(2000);
         } else {
-            // 如果没有 Cancel，点击遮罩层
-            await closeDialog(page, auth);
+            throw new Error('未找到 Confirm 按钮');
         }
-        await auth.safeWait(500);
     }
+
+    // 🔥 等待 Success 弹窗出现
+    console.log('      ⏳ 等待 Success 弹窗...');
+    const successResult = await handleSuccessDialog(page, auth);
 
     return {
         amount: amount,
         turnoverRequirement: playCodeText,
-        turnoverMultiple: turnoverMultiple
+        turnoverMultiple: turnoverMultiple,
+        successHandled: successResult.success
     };
 }
+/**
+ * 处理 Success 弹窗（Cash out request submitted successfully）
+ * 这是点击 Confirm 后出现的成功提示弹窗
+ */
+async function handleSuccessDialog(page, auth) {
+    console.log('      🎉 处理 Success 弹窗...');
+
+    try {
+        // 等待 Success 弹窗出现
+        const successDialog = page.locator('.dialog-content').filter({
+            has: page.locator('.success-tips')
+        });
+
+        const isSuccessVisible = await successDialog.isVisible({ timeout: 5000 }).catch(() => false);
+
+        if (!isSuccessVisible) {
+            console.log('      ⚠️ Success 弹窗未出现');
+            return { success: false, error: 'Success 弹窗未出现' };
+        }
+
+        // 获取成功提示文本
+        const successText = await page.locator('.success_txt').textContent({ timeout: 3000 }).catch(() => '');
+        console.log(`      📝 成功提示: ${successText}`);
+
+        // 查找 OK 按钮
+        const okBtn = page.locator('.dialog-footer .subBtn.btn_main_style').filter({
+            hasText: /OK|确定|知道了/i
+        });
+
+        const isOkVisible = await okBtn.isVisible({ timeout: 3000 }).catch(() => false);
+
+        if (!isOkVisible) {
+            // 尝试更宽松的选择器
+            const anyBtn = page.locator('.dialog-footer .subBtn, .dialog-footer button');
+            const anyBtnVisible = await anyBtn.isVisible({ timeout: 2000 }).catch(() => false);
+
+            if (!anyBtnVisible) {
+                throw new Error('未找到 OK 按钮');
+            }
+            console.log('      ⚠️ 使用通用按钮选择器');
+            await anyBtn.first().click();
+        } else {
+            await okBtn.click();
+        }
+
+        console.log('      🖱️ 已点击 OK 按钮');
+        await auth.safeWait(2000);
+
+        // 🔥 点击 OK 后，会进入下一轮活动
+        console.log('      ✅ Success 弹窗处理完成，即将进入下一轮活动');
+
+        return {
+            success: true,
+            message: successText
+        };
+
+    } catch (error) {
+        console.log(`      ❌ 处理 Success 弹窗失败: ${error.message}`);
+        return { success: false, error: error.message };
+    }
+}
+
 
 /**
  * 处理第三种弹窗：未绑定提现信息
