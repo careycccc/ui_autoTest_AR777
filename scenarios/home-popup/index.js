@@ -8,8 +8,6 @@ import { handleDepositPopup } from './deposit.js';
 import { handleRebatePopup } from './rebate.js';
 import { handleLossRebatePopup } from './loss-rebate.js';
 import { handleDailyDepositRewardsPopup } from './daily-deposit-rewards.js';
-
-// 新增处理函数
 import { handleTasksPopup } from './tasks.js';
 import { handleUIDPopup } from './uid.js';
 import { handleDepositWheelPopup } from './deposit-wheel.js';
@@ -19,7 +17,7 @@ import { handleChampionshipPopup } from './championship.js';
 import { handleVIPPopup } from './vip.js';
 import { handleSuperJackpotPopup } from './super-jackpot.js';
 import { handleCouponsPopup } from './coupons.js';
-import { handleWithdrawPopup } from './withdraw.js';
+import { handleWithdrawPopup } from '../menu/withdraw/withdraw-select.js';
 import { handleRechargeDialogPopup } from './recharge-dialog.js';
 
 /**
@@ -89,7 +87,6 @@ export {
     handleRebatePopup,
     handleLossRebatePopup,
     handleDailyDepositRewardsPopup,
-    // 新增
     handleTasksPopup,
     handleUIDPopup,
     handleDepositWheelPopup,

@@ -1,4 +1,5 @@
 import { handleFailure } from '../utils.js';
+import { handleCashOutDialog } from './turntable-catchout.js';
 
 /**
  * 检查 Canvas 是否正确加载
@@ -220,6 +221,8 @@ async function detectTurntableState(page) {
         .isVisible({ timeout: 2000 })
         .catch(() => false);
 
+    console.log(`        🔍 状态1检测: Cash everyday=${cashEverydayVisible}, Choose your reward=${chooseRewardVisible}`);
+
     if (cashEverydayVisible || chooseRewardVisible) {
         console.log('        ✅ 检测到状态1: Cash everyday 礼物选择界面');
 
@@ -235,12 +238,54 @@ async function detectTurntableState(page) {
         };
     }
 
-    // 🔥 状态2检测：Invitation Wheel（活动已开启）
-    const invitationWheelVisible = await page.locator('text=Invitation Wheel')
+    // 🔥 状态3检测：Congratulations 奖励已满足（需要 CASH OUT）
+    // 必须同时有 Congratulations 和 CASH OUT 文本才是状态3
+    const congratulationsVisible = await page.locator('text=Congratulations')
         .isVisible({ timeout: 2000 })
         .catch(() => false);
 
-    const cashOutVisible = await page.locator('text=CASH OUT')
+    // 检测 CASH OUT 按钮（使用多种选择器）
+    const cashOutSelectors = [
+        '.cash_out',
+        'button:has-text("CASH OUT")',
+        '.comfirBtn:has-text("CASH OUT")',
+        'text=CASH OUT'
+    ];
+
+    let cashOutVisible = false;
+    for (const selector of cashOutSelectors) {
+        const isVisible = await page.locator(selector).first()
+            .isVisible({ timeout: 1000 })
+            .catch(() => false);
+        if (isVisible) {
+            cashOutVisible = true;
+            console.log(`        🔍 找到 CASH OUT 按钮: ${selector}`);
+            break;
+        }
+    }
+
+    console.log(`        🔍 状态3检测: Congratulations=${congratulationsVisible}, CASH OUT=${cashOutVisible}`);
+
+    if (congratulationsVisible && cashOutVisible) {
+        console.log('        ✅ 检测到状态3: Congratulations 奖励已满足');
+
+        // 尝试获取奖励金额
+        const amountText = await page.locator('.amount, .reward-amount, [class*="amount"]')
+            .first()
+            .textContent({ timeout: 2000 })
+            .catch(() => '');
+
+        return {
+            state: 'reward_ready',
+            description: 'Congratulations 奖励已满足',
+            needsGiftSelection: false,
+            needsCashOut: true,
+            rewardAmount: amountText
+        };
+    }
+
+    // 🔥 状态2检测：Invitation Wheel（活动已开启）
+    const invitationWheelVisible = await page.locator('text=Invitation Wheel')
         .isVisible({ timeout: 2000 })
         .catch(() => false);
 
@@ -248,7 +293,9 @@ async function detectTurntableState(page) {
         .isVisible({ timeout: 2000 })
         .catch(() => false);
 
-    if (invitationWheelVisible || cashOutVisible || inviteFriendsVisible) {
+    console.log(`        🔍 状态2检测: Invitation Wheel=${invitationWheelVisible}, INVITE FRIENDS=${inviteFriendsVisible}`);
+
+    if (invitationWheelVisible || inviteFriendsVisible) {
         console.log('        ✅ 检测到状态2: Invitation Wheel 转盘界面');
 
         return {
@@ -429,6 +476,65 @@ export async function turntablePlay(page, test, auth, options = {}) {
             if (!giftSuccess) {
                 console.log('        ⚠️ 礼物选择处理失败，但继续执行');
             }
+
+        } else if (state.state === 'reward_ready' && state.needsCashOut) {
+            // 状态3: 奖励已满足，需要 CASH OUT
+            console.log('        💰 检测到 Congratulations 奖励页面');
+            console.log(`        💵 奖励金额: ${state.rewardAmount}`);
+            console.log('        🔘 需要点击 CASH OUT 按钮');
+
+            // 查找并点击 CASH OUT 按钮
+            const cashOutSelectors = [
+                '.cash_out',
+                'button:has-text("CASH OUT")',
+                '.comfirBtn:has-text("CASH OUT")',
+                'button.comfirBtn',
+                '[class*="cash"]'
+            ];
+
+            let cashOutClicked = false;
+            for (const selector of cashOutSelectors) {
+                const btn = page.locator(selector).first();
+                const isVisible = await btn.isVisible({ timeout: 1000 }).catch(() => false);
+
+                if (isVisible) {
+                    await btn.click();
+                    console.log(`        ✅ 已点击 CASH OUT 按钮 (选择器: ${selector})`);
+                    cashOutClicked = true;
+                    await page.waitForTimeout(2000);
+                    break;
+                }
+            }
+
+            if (!cashOutClicked) {
+                console.log('        ⚠️ 未找到 CASH OUT 按钮');
+            }
+
+            // 🔥 点击 CASH OUT 后，处理弹窗（4种弹窗之一）
+            if (cashOutClicked) {
+                console.log('        🔍 开始处理 CASH OUT 弹窗...');
+                try {
+                    const cashOutResult = await handleCashOutDialog(page, auth, test);
+                    if (cashOutResult.success) {
+                        console.log(`        ✅ CASH OUT 弹窗处理完成 (类型: ${cashOutResult.type})`);
+                    } else {
+                        console.log(`        ⚠️ CASH OUT 弹窗处理失败: ${cashOutResult.error}`);
+                    }
+                } catch (error) {
+                    console.log(`        ⚠️ CASH OUT 弹窗处理异常: ${error.message}`);
+                }
+            }
+
+            // 🔥 状态3不需要等待 Canvas 渲染，直接返回
+            console.log('        ✅ 本轮活动已满足，无需等待 Canvas 渲染');
+            console.log(`        ✅ ${actionName}完成`);
+
+            return {
+                success: true,
+                state: state.state,
+                cashOutClicked,
+                skipCanvasCheck: true
+            };
 
         } else if (state.state === 'wheel_active') {
             // 状态2: 转盘已激活

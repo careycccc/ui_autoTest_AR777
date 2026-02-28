@@ -7,6 +7,7 @@ export class AuthHelper {
         this.t = testCase;
         this.page = testCase.page;
         this.isLoggedIn = false;
+        this.userId = null; // 🔥 存储用户 ID
     }
 
     // ========================================
@@ -1321,6 +1322,9 @@ export class AuthHelper {
                 console.log('        ✓ 已进入主页面');
                 console.log('        🔗 URL:', this.page.url());
             });
+
+            // 🔥 获取用户信息（userId）
+            await this.getUserInfo();
         }
 
         return success;
@@ -1395,9 +1399,59 @@ export class AuthHelper {
         }
     }
 
+    /**
+     * 🔥 获取用户信息（从 /api/User/GetUserInfo 接口）
+     * 提取 userId 并存储到 auth 对象中
+     */
+    async getUserInfo() {
+        try {
+            console.log('        🔍 获取用户信息...');
+
+            // 等待接口响应
+            await this.page.waitForTimeout(1000);
+
+            // 从网络监控中查找用户信息接口
+            const apiRequests = this.t.networkMonitor.getApiRequests();
+            const userInfoRequest = apiRequests.find(req =>
+                req.url.includes('/api/User/GetUserInfo')
+            );
+
+            if (!userInfoRequest || !userInfoRequest.responseBody) {
+                console.log('        ⚠️ 未找到用户信息接口数据');
+                return false;
+            }
+
+            const response = userInfoRequest.responseBody;
+
+            // 提取 userId
+            if (response.code === 0 && response.data && response.data.userId) {
+                this.userId = response.data.userId;
+                console.log(`        ✅ 获取到 userId: ${this.userId}`);
+                return true;
+            } else {
+                console.log('        ⚠️ 用户信息接口响应格式异常');
+                console.log('        📊 响应数据:', JSON.stringify(response).substring(0, 200));
+                return false;
+            }
+
+        } catch (error) {
+            console.log(`        ❌ 获取用户信息失败: ${error.message}`);
+            return false;
+        }
+    }
+
+    /**
+     * 🔥 获取存储的 userId
+     * @returns {number|null} 返回 userId，如果未获取则返回 null
+     */
+    getUserId() {
+        return this.userId;
+    }
+
     async logout() {
         if (!this.isLoggedIn) return;
         this.isLoggedIn = false;
+        this.userId = null; // 🔥 清除 userId
     }
 }
 

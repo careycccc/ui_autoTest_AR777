@@ -4,7 +4,7 @@ import crypto from 'crypto';
 
 export class Utils {
     /**
-     * 实现 Golang 的 Md5Info
+     *
      */
     static md5Info(data, uppercase = true) {
         const hash = crypto.createHash('md5').update(data).digest('hex');

@@ -6,7 +6,7 @@
 
 import { registerPromoCases } from './promo/promo-cases.js';
 import { registerEarnCases } from './earn/earn-cases.js';
-import { registerMenuCases } from './menu/menu-cases.js';
+import { registerMenuCases } from './menu/menu-index.js';
 import { registerTurntableCases } from './turntable/turntable-cases.js';
 import { registerHomeCases } from './home/home-cases.js';
 

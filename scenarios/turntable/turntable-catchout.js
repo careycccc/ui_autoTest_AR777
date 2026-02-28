@@ -4,6 +4,81 @@
  */
 
 /**
+ * 直接处理已经出现的 CASH OUT 弹窗（不点击按钮）
+ * @param {*} page 
+ * @param {*} auth 
+ * @param {*} test 
+ * @returns {Object} 弹窗处理结果
+ */
+export async function handleCashOutDialog(page, auth, test) {
+    console.log('      🔍 开始处理 CASH OUT 弹窗...');
+
+    try {
+        // 等待弹窗出现
+        await page.waitForTimeout(1500);
+
+        // 获取弹窗标题以判断类型
+        const dialogContent = page.locator('.dialog-content');
+        const isDialogVisible = await dialogContent.isVisible({ timeout: 5000 }).catch(() => false);
+
+        if (!isDialogVisible) {
+            console.log('      ⚠️ 未检测到弹窗');
+            return { success: false, error: '弹窗未出现' };
+        }
+
+        const dialogTitle = await page.locator('.dialog-title').textContent({ timeout: 3000 }).catch(() => '');
+        console.log(`      📋 弹窗标题: "${dialogTitle}"`);
+
+        // 根据弹窗标题自动识别类型并处理
+        let result = null;
+        let dialogType = '';
+
+        if (dialogTitle.includes('Insufficient amount')) {
+            // 第一种：金额不足
+            dialogType = 'insufficient_amount';
+            result = await handleInsufficientAmountDialog(page, auth);
+            console.log(`      💰 还需金额: ${result.neededAmount}`);
+
+        } else if (dialogTitle.includes('Cash out') && dialogTitle === 'Cash out') {
+            // 第二种：确认提现（需要流水）
+            dialogType = 'cash_out_confirm';
+            result = await handleCashOutConfirmDialog(page, auth);
+            console.log(`      💵 提现金额: ${result.amount}`);
+            console.log(`      📊 流水倍数: ${result.turnoverMultiple}x`);
+
+        } else if (dialogTitle.includes('Proceed to Bind')) {
+            // 第三种：未绑定提现信息
+            dialogType = 'bind_required';
+            result = await handleBindRequiredDialog(page, auth, test);
+            console.log(`      📝 提示: ${result.message}`);
+
+        } else if (dialogTitle.includes('Choose cash out method')) {
+            // 第四种：选择提现方式
+            dialogType = 'choose_method';
+            result = await handleChooseMethodDialog(page, auth);
+            console.log(`      💰 提现金额: ${result.amountValue}`);
+            console.log(`      💳 可用方式: ${result.methodCount} 种 (${result.methods.join(', ')})`);
+
+        } else {
+            console.log(`      ⚠️ 未知的弹窗类型: "${dialogTitle}"`);
+            return { success: false, error: `未知的弹窗类型: "${dialogTitle}"` };
+        }
+
+        console.log(`      ✅ CASH OUT 弹窗处理完成 (类型: ${dialogType})`);
+
+        return {
+            success: true,
+            type: dialogType,
+            title: dialogTitle,
+            ...result
+        };
+    } catch (error) {
+        console.log(`      ❌ 处理弹窗失败: ${error.message}`);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
  * 点击 CASH OUT 按钮并等待弹窗
  * @param {*} page 
  * @param {*} auth 
@@ -214,7 +289,7 @@ async function handleCashOutConfirmDialog(page, auth) {
 /**
  * 处理第三种弹窗：未绑定提现信息
  */
-async function handleBindRequiredDialog(page, auth) {
+async function handleBindRequiredDialog(page, auth, test) {
     console.log('      💰 弹窗类型: 未绑定提现信息');
 
     // 获取提示信息
@@ -236,15 +311,37 @@ async function handleBindRequiredDialog(page, auth) {
             throw new Error('未找到确认按钮');
         }
         console.log('      ⚠️ 使用通用按钮选择器');
+        await anyBtn.first().click();
+    } else {
+        console.log('      ✅ 验证通过: 未绑定提现信息弹窗');
+        await okBtn.click();
     }
 
-    console.log('      ✅ 验证通过: 未绑定提现信息弹窗');
+    console.log('      🖱️ 已点击 OK 按钮');
+    await page.waitForTimeout(1000);
 
-    // 关闭弹窗
-    await closeDialog(page, auth);
+    // 🔥 点击 OK 后，页面会跳转到 Withdraw 页面
+    console.log('      🔄 等待页面跳转到 Withdraw 页面...');
+
+    if (test) {
+        const switchSuccess = await test.switchToPage('Withdraw 提现页面', {
+            waitForSelector: 'text=Withdraw',
+            waitTime: 2000,
+            collectPreviousPage: true
+        });
+
+        if (switchSuccess) {
+            console.log('      ✅ 已成功切换到 Withdraw 页面');
+        } else {
+            console.log('      ⚠️ 页面切换失败或超时');
+        }
+    } else {
+        console.log('      ⚠️ test 对象未提供，跳过页面切换');
+    }
 
     return {
-        message: tipText
+        message: tipText,
+        pageSwitch: test ? true : false
     };
 }
 

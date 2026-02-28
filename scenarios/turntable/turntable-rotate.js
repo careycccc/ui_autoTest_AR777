@@ -573,6 +573,53 @@ export async function rotateTurntable(page, test, options = {}) {
             }
         }
 
+        // 10. 检查是否跳转到了奖励页面（Congratulations 页面）
+        const cashOutButtonSelectors = [
+            '.cash_out',
+            'button:has-text("CASH OUT")',
+            '.comfirBtn:has-text("CASH OUT")',
+            'button.comfirBtn',
+            '[class*="cash"]'
+        ];
+
+        let cashOutButton = null;
+        let isCashOutPageVisible = false;
+
+        for (const selector of cashOutButtonSelectors) {
+            const btn = page.locator(selector).first();
+            const isVisible = await btn.isVisible({ timeout: 1000 }).catch(() => false);
+
+            if (isVisible) {
+                cashOutButton = btn;
+                isCashOutPageVisible = true;
+                console.log(`        🎉 检测到 CASH OUT 按钮 (选择器: ${selector})`);
+                break;
+            }
+        }
+
+        if (isCashOutPageVisible && cashOutButton) {
+            console.log('        🎉 检测到奖励页面（Congratulations），准备点击 CASH OUT...');
+            result.reachedCashOutPage = true;
+
+            // 点击 CASH OUT 按钮
+            try {
+                await cashOutButton.click();
+                console.log('        ✅ 已点击 CASH OUT 按钮');
+                result.cashOutClicked = true;
+
+                // 等待可能的弹窗或页面跳转
+                await page.waitForTimeout(2000);
+
+                // 这里会触发 CASH OUT 的后续逻辑（弹窗处理）
+                // 弹窗处理逻辑在 turntable-catchout.js 中
+                console.log('        💰 CASH OUT 按钮已点击，等待弹窗处理...');
+
+            } catch (error) {
+                console.log(`        ❌ 点击 CASH OUT 按钮失败: ${error.message}`);
+                result.cashOutError = error.message;
+            }
+        }
+
         result.success = true;
         console.log('        ✅ 转盘旋转完成');
         return result;

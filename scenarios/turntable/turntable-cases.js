@@ -352,6 +352,27 @@ export function registerTurntableCases(runner) {
 
             console.log(`        ✅ 第 ${spinCount} 次旋转成功`);
 
+            // 🔥 检查是否跳转到了 CASH OUT 页面
+            if (rotateResult.reachedCashOutPage) {
+                console.log('        🎉 已跳转到奖励页面（Congratulations）');
+
+                if (rotateResult.cashOutClicked) {
+                    console.log('        ✅ CASH OUT 按钮已点击');
+
+                    // 调用 CASH OUT 弹窗处理逻辑
+                    try {
+                        const cashOutResult = await verifyCashOut(page, auth, test);
+                        console.log(`        ✅ CASH OUT 弹窗处理完成 (类型: ${cashOutResult.type})`);
+                    } catch (error) {
+                        console.log(`        ⚠️ CASH OUT 弹窗处理失败: ${error.message}`);
+                    }
+                }
+
+                // 停止旋转
+                shouldContinue = false;
+                break;
+            }
+
             // 🔥 检查结束条件
             const { shouldRotateTurntable, getWheelRemainCount } = await import('../turntable/turntable-index.js');
 
