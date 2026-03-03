@@ -2,6 +2,152 @@
 
 ## 重要修复记录
 
+### 🔧 修复：礼物盒状态检测逻辑（2026-03-02）
+
+**问题描述**：
+- 当活动未开始时，页面上有4个礼物盒需要点击开启活动
+- 但状态检测只依赖 "Cash everyday" 文本，如果文本不显示，就无法识别 `gift_selection` 状态
+- 导致误判为 `wheel_active` 状态，跳过了礼物盒选择步骤
+
+**错误日志**：
+```
+🔍 状态1检测: Cash everyday=false, Choose your reward=false
+🔍 找到 CASH OUT 按钮: text=CASH OUT
+🔍 状态3检测: Congratulations=false, CASH OUT=true
+🔍 状态2检测: Invitation Wheel=true, INVITE FRIENDS=true
+✅ 检测到状态2: Invitation Wheel 转盘界面  ← 错误！应该是状态1
+```
+
+**根本原因**：
+- 状态检测只检查文本，不检查礼物盒元素
+- 即使页面上有礼物盒（`.gift_list .gift_item`），如果没有 "Cash everyday" 文本，就会被误判为其他状态
+
+**解决方案**：
+优先检查礼物盒元素是否存在，而不是只依赖文本：
+
+```javascript
+// 优先检查礼物盒是否存在
+const giftList = page.locator('.gift_list');
+const giftListVisible = await giftList.isVisible({ timeout: 2000 }).catch(() => false);
+
+let giftCount = 0;
+if (giftListVisible) {
+    const giftItems = giftList.locator('.gift_item');
+    giftCount = await giftItems.count().catch(() => 0);
+}
+
+// 如果有礼物盒（不管是否有文本），都认为是 gift_selection 状态
+if (giftCount > 0 || cashEverydayVisible || chooseRewardVisible) {
+    return {
+        state: 'gift_selection',
+        needsGiftSelection: giftCount > 0
+    };
+}
+```
+
+**修复后的检测逻辑**：
+1. 先检查礼物盒元素（`.gift_list .gift_item`）
+2. 再检查文本（"Cash everyday", "Choose your reward"）
+3. 只要有礼物盒或文本，就认为是 `gift_selection` 状态
+
+**修复文件**：
+- `scenarios/turntable/turntable-init.js` - 修改 `detectTurntableState()` 函数
+
+---
+
+### 🔧 优化：Canvas 渲染检查时机（2026-02-28）
+
+**问题描述**：
+- 在"转盘页面加载"用例中，即使检测到正常转盘页面（`wheel_active` 或 `gift_selection`）
+- 仍然会执行 Canvas 加载检查，等待 2-5 秒
+- 但其他子用例（规则、历史、邀请）不需要 Canvas，这个等待是浪费时间
+
+**优化方案**：
+- "转盘页面加载"用例只负责页面状态检测和初始化
+- 检测到正常转盘页面后，直接返回，不检查 Canvas
+- Canvas 渲染检查在"转盘旋转功能"用例中执行（`rotateTurntable()` 函数内部）
+- 只有在未知状态时才在"转盘页面加载"用例中检查 Canvas（作为兜底）
+
+**修复代码**（scenarios/turntable/turntable-cases.js）：
+```javascript
+// 如果是正常转盘页面，标记需要先执行其他子用例
+if (initResult.state === 'wheel_active' || initResult.state === 'gift_selection') {
+    console.log('ℹ️ 检测到正常转盘页面，将先执行其他子用例（规则、历史、邀请）');
+    auth.turntableShouldExecuteOtherCasesFirst = true;
+    
+    // 🔥 正常转盘页面不需要在这里检查 Canvas
+    // Canvas 检查会在"转盘旋转功能"用例中执行
+    console.log('ℹ️ Canvas 检查将在"转盘旋转功能"用例中执行');
+    auth.turntablePageFailed = false;
+    auth.turntableInitialized = true;
+    return;  // 直接返回，不检查 Canvas
+}
+```
+
+**效果**：
+- 节省 2-5 秒的 Canvas 等待时间
+- 其他子用例（规则、历史、邀请）可以更快执行
+- Canvas 检查只在真正需要旋转时执行
+
+**修复文件**：
+- `scenarios/turntable/turntable-cases.js` - 优化"转盘页面加载"用例
+
+---
+
+### 🔧 修复：父用例完成后仍然返回子用例页面（2026-02-28）
+
+**问题描述**：
+- 当第一个子用例（转盘页面加载）检测到 `reward_ready` 状态并完成 CASH OUT 后
+- 设置了 `auth.turntableParentCaseCompleted = true` 标记父用例已完成
+- 但是在子用例执行完成后，TestModle 的 `_returnToParentTab()` 方法仍然会尝试返回父用例页面
+- 导致重新导航到邀请转盘页面，浪费时间
+
+**错误日志**：
+```
+✅ 邀请转盘父用例已完成，跳过所有后续子用例
+✅ 通过 (9128ms)
+🔙 返回父用例: 邀请转盘
+🔙 第1次尝试返回...
+← 未找到返回按钮选择器，尝试点击左上角坐标
+🖱️ 点击 top-left (30, 30)
+📍 返回后路由: https://arplatsaassit4.club/activity
+🔙 第2次尝试返回...
+← 点击返回按钮: .ar_icon.back.back
+📍 返回后路由: https://arplatsaassit4.club/
+⚠️ 返回到了 Home 页面，重新导航到父用例
+🔍 [_navigateToTab] 开始导航到: 邀请转盘
+```
+
+**解决方案**：
+在 `_returnToParentTab()` 方法开始时检查 `auth.turntableParentCaseCompleted` 标志：
+- 如果为 true 且是邀请转盘父用例，直接跳过返回操作
+- 避免不必要的页面导航和等待
+
+**修复代码**（src/core/TestModle.js）：
+```javascript
+async _returnToParentTab(tab, maxAttempts = 3) {
+    if (!tab) return false;
+    
+    // 🔥 检查父用例是否已完成（邀请转盘特殊情况）
+    if (this.auth.turntableParentCaseCompleted && tab.name === '邀请转盘') {
+        console.log(`ℹ️ 邀请转盘父用例已完成，跳过返回操作`);
+        return true;
+    }
+    
+    // ... 正常返回逻辑
+}
+```
+
+**效果**：
+- 父用例完成后，后续子用例会直接跳过（0ms）
+- 不会再尝试返回和重新导航到邀请转盘页面
+- 节省约 10-15 秒的等待时间
+
+**修复文件**：
+- `src/core/TestModle.js` - 修改 `_returnToParentTab()` 方法
+
+---
+
 ### 🔧 修复：规则弹窗关闭方式（2026-02-28）
 
 **问题描述**：

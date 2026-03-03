@@ -103,8 +103,17 @@ export function registerTurntableCases(runner) {
                 if (initResult.state === 'wheel_active' || initResult.state === 'gift_selection') {
                     console.log('        ℹ️ 检测到正常转盘页面，将先执行其他子用例（规则、历史、邀请）');
                     auth.turntableShouldExecuteOtherCasesFirst = true;
+
+                    // 🔥 正常转盘页面不需要在这里检查 Canvas
+                    // Canvas 检查会在"转盘旋转功能"用例中执行
+                    console.log('        ℹ️ Canvas 检查将在"转盘旋转功能"用例中执行');
+                    auth.turntablePageFailed = false;
+                    auth.turntableInitialized = true;
+                    return;
                 }
 
+                // 🔥 只有在未知状态时才检查 Canvas（作为兜底）
+                console.log('        🔍 未知状态，执行 Canvas 检查...');
                 const canvasCheck = await checkCanvasLoaded(page, {
                     selector: '#turntable_canvas canvas',
                     timeout: 5000,
@@ -267,6 +276,40 @@ export function registerTurntableCases(runner) {
             console.log('        🎯 执行转盘初始化前置步骤...');
             await turntablePlay(page, test, auth);
             auth.turntableInitialized = true;
+        }
+
+        // 🔥 在执行旋转前，检查 Canvas 是否已加载
+        console.log('        🎨 检查转盘 Canvas 渲染状态...');
+        const canvasCheck = await checkCanvasLoaded(page, {
+            selector: '#turntable_canvas canvas',
+            timeout: 5000,
+            waitBeforeCheck: 2000,
+            checkPixels: true
+        });
+
+        if (!canvasCheck.success) {
+            console.log(`        ⚠️ Canvas 检查失败: ${canvasCheck.error}`);
+            console.log('        ℹ️ 尝试刷新页面重新加载 Canvas...');
+
+            await page.reload({ waitUntil: 'domcontentloaded' });
+            await page.waitForTimeout(3000);
+
+            // 重新检查
+            const retryCheck = await checkCanvasLoaded(page, {
+                selector: '#turntable_canvas canvas',
+                timeout: 5000,
+                waitBeforeCheck: 2000,
+                checkPixels: true
+            });
+
+            if (!retryCheck.success) {
+                console.log(`        ❌ Canvas 仍未加载: ${retryCheck.error}`);
+                console.log('        ⚠️ 继续执行旋转，但可能会失败');
+            } else {
+                console.log('        ✅ Canvas 刷新后加载成功');
+            }
+        } else {
+            console.log('        ✅ Canvas 已正确加载');
         }
 
         const maxSpins = 20;

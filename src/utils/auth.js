@@ -911,6 +911,28 @@ export class AuthHelper {
                 popupCount++;
                 console.log(`        🎁 第${checkCount}次检查：发现第${popupCount}个弹窗，处理中...`);
 
+                // 🔥 优先检查是否是红包雨活动
+                const { detectRedPackRain, waitForRedPackRainEnd } = await import('../../scenarios/home-popup/red-pack-rain.js');
+                const redPackDetection = await detectRedPackRain(this.page);
+
+                if (redPackDetection.isActive) {
+                    console.log(`        🌧️ 检测到红包雨活动正在进行`);
+                    const waitResult = await waitForRedPackRainEnd(this.page, {
+                        maxWaitTime: 10000,
+                        checkInterval: 1000
+                    });
+
+                    if (waitResult.success) {
+                        console.log(`        ✅ 红包雨活动已结束，继续检查其他弹窗`);
+                    } else {
+                        console.log(`        ⚠️ 红包雨等待超时，继续执行`);
+                    }
+
+                    // 红包雨结束后继续检查是否还有其他弹窗
+                    await this.safeWait(1000);
+                    continue;
+                }
+
                 // 🔥 如果有弹窗配置数据，使用智能处理
                 if (popupConfigs.length > 0 && currentPopupIndex < popupConfigs.length) {
                     const popupConfig = popupConfigs[currentPopupIndex];
@@ -1247,6 +1269,120 @@ export class AuthHelper {
         }
     }
 
+    /**
+     * 选择手机区号
+     * @param {string} targetAreaCode - 目标区号（例如 "91"）
+     * @returns {Promise<Object>} 返回选择结果
+     */
+    async selectPhoneAreaCode(targetAreaCode) {
+        try {
+            console.log(`      🌍 检查手机区号...`);
+
+            // 获取当前显示的区号
+            const currentCodeElement = this.page.getByTestId('phone-area-code');
+            const currentCode = await currentCodeElement.textContent({ timeout: 3000 });
+
+            console.log(`      📍 当前区号: ${currentCode}`);
+            console.log(`      🎯 目标区号: +${targetAreaCode}`);
+
+            // 如果当前区号已经是目标区号，直接返回成功
+            if (currentCode === '+' + targetAreaCode) {
+                console.log(`      ✅ 区号已经是 +${targetAreaCode}，无需切换`);
+                return {
+                    success: true,
+                    alreadySelected: true,
+                    currentCode
+                };
+            }
+
+            // 需要切换区号
+            console.log(`      🔄 需要切换区号: ${currentCode} → +${targetAreaCode}`);
+
+            // 点击区号选择器打开下拉列表
+            const areaSelector = this.page.locator('[data-testid="login-phone-area"]');
+            await areaSelector.click();
+            console.log(`      ✅ 已点击区号选择器`);
+
+            // 等待下拉列表出现
+            await this.page.waitForTimeout(500);
+
+            // 检查下拉列表是否可见
+            const optionsList = this.page.locator('[data-testid="phone-area-list"]');
+            const isListVisible = await optionsList.isVisible({ timeout: 2000 }).catch(() => false);
+
+            if (!isListVisible) {
+                return {
+                    success: false,
+                    error: '下拉列表未出现'
+                };
+            }
+
+            console.log(`      ✅ 下拉列表已展开`);
+
+            // 获取所有可用的区号选项
+            const options = this.page.locator('[data-testid^="phone-area-option-"]');
+            const optionCount = await options.count();
+            console.log(`      📋 找到 ${optionCount} 个区号选项`);
+
+            // 查找目标区号选项
+            const targetOption = this.page.locator(`[data-testid="phone-area-option-${targetAreaCode}"]`);
+            const targetExists = await targetOption.count() > 0;
+
+            if (!targetExists) {
+                // 获取所有可用区号用于错误信息
+                const availableCodes = [];
+                for (let i = 0; i < optionCount; i++) {
+                    const optionText = await options.nth(i).textContent();
+                    const codeMatch = optionText.match(/\+(\d+)/);
+                    if (codeMatch) {
+                        availableCodes.push(codeMatch[1]);
+                    }
+                }
+
+                const errorMsg = `下拉列表中没有找到区号 +${targetAreaCode}。可用区号: ${availableCodes.join(', ')}`;
+                console.log(`      ❌ ${errorMsg}`);
+
+                return {
+                    success: false,
+                    error: errorMsg,
+                    availableCodes
+                };
+            }
+
+            // 点击目标区号选项
+            await targetOption.click();
+            console.log(`      ✅ 已点击区号 +${targetAreaCode}`);
+
+            // 等待选择生效
+            await this.page.waitForTimeout(500);
+
+            // 验证区号是否切换成功
+            const newCode = await currentCodeElement.textContent({ timeout: 2000 });
+
+            if (newCode === '+' + targetAreaCode) {
+                console.log(`      ✅ 区号切换成功: ${newCode}`);
+                return {
+                    success: true,
+                    switched: true,
+                    oldCode: currentCode,
+                    newCode
+                };
+            } else {
+                return {
+                    success: false,
+                    error: `区号切换失败，当前仍为 ${newCode}`
+                };
+            }
+
+        } catch (error) {
+            console.log(`      ❌ 区号选择过程出错: ${error.message}`);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
     // ========================================
     // 登录执行逻辑
     // ========================================
@@ -1267,10 +1403,11 @@ export class AuthHelper {
             await this.t.assert.textEquals('[data-testid="login-send-code-btn"]', 'Send', '未找到 Send');
         });
 
-        const currentCode = await this.page.getByTestId('phone-area-code').textContent();
-        if (currentCode !== '+' + areaCode) {
-            console.log(`      ⚠️ 区号不匹配: ${currentCode}`);
-            return false;
+        // 🔥 检查并切换区号
+        const areaCodeResult = await this.selectPhoneAreaCode(areaCode);
+        if (!areaCodeResult.success) {
+            console.log(`      ❌ 区号选择失败: ${areaCodeResult.error}`);
+            throw new Error(`区号选择失败: ${areaCodeResult.error}`);
         }
 
         await this.t.step('输入手机号', async () => {

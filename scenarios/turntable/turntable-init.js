@@ -213,6 +213,16 @@ async function detectTurntableState(page) {
     await page.waitForTimeout(1500);
 
     // 🔥 状态1检测：Cash everyday + 礼物盒（首次进入/新一轮）
+    // 优先检查礼物盒是否存在（即使没有 "Cash everyday" 文本）
+    const giftList = page.locator('.gift_list');
+    const giftListVisible = await giftList.isVisible({ timeout: 2000 }).catch(() => false);
+
+    let giftCount = 0;
+    if (giftListVisible) {
+        const giftItems = giftList.locator('.gift_item');
+        giftCount = await giftItems.count().catch(() => 0);
+    }
+
     const cashEverydayVisible = await page.locator('text=Cash everyday')
         .isVisible({ timeout: 2000 })
         .catch(() => false);
@@ -221,14 +231,11 @@ async function detectTurntableState(page) {
         .isVisible({ timeout: 2000 })
         .catch(() => false);
 
-    console.log(`        🔍 状态1检测: Cash everyday=${cashEverydayVisible}, Choose your reward=${chooseRewardVisible}`);
+    console.log(`        🔍 状态1检测: Cash everyday=${cashEverydayVisible}, Choose your reward=${chooseRewardVisible}, 礼物盒=${giftCount}个`);
 
-    if (cashEverydayVisible || chooseRewardVisible) {
+    // 🔥 如果有礼物盒（不管是否有文本），都认为是 gift_selection 状态
+    if (giftCount > 0 || cashEverydayVisible || chooseRewardVisible) {
         console.log('        ✅ 检测到状态1: Cash everyday 礼物选择界面');
-
-        // 检查礼物盒数量
-        const giftItems = page.locator('.gift_item');
-        const giftCount = await giftItems.count().catch(() => 0);
 
         return {
             state: 'gift_selection',
@@ -545,7 +552,7 @@ export async function turntablePlay(page, test, auth, options = {}) {
             console.log('        ⚠️ 未识别状态，尝试继续执行');
         }
 
-        // 🔥 步骤3: 等待并验证转盘界面
+        // 🔥 步骤3: 验证转盘界面元素
         await page.waitForTimeout(1000);
 
         console.log('        🔍 验证转盘界面元素...');
@@ -571,96 +578,10 @@ export async function turntablePlay(page, test, auth, options = {}) {
             console.log('        ⚠️ 未找到转盘特征元素');
         }
 
-        // 🔥 步骤4: 等待 Canvas 渲染
-        console.log('        ⏳ 等待转盘 Canvas 渲染...');
-
-        // 🔥 增加等待时间，给 Canvas 更多时间加载和渲染
-        await page.waitForTimeout(5000);
-
-        // 检查 Canvas 是否存在并已渲染
-        const canvasCheck = await checkCanvasLoaded(page, {
-            selector: '#turntable_canvas canvas',
-            timeout: 5000,
-            waitBeforeCheck: 1000,
-            checkPixels: true  // 🔥 启用像素检查
-        });
-
-        console.log(`        📊 Canvas 检查结果:`);
-        console.log(`           存在: ${canvasCheck.exists}`);
-        console.log(`           有尺寸: ${canvasCheck.hasSize}`);
-        console.log(`           可见: ${canvasCheck.visible}`);
-        console.log(`           有内容: ${canvasCheck.hasContent}`);
-
-        if (canvasCheck.canvasInfo) {
-            console.log(`        📊 Canvas 详细信息:`);
-            console.log(`           尺寸: ${canvasCheck.canvasInfo.width}x${canvasCheck.canvasInfo.height}`);
-            console.log(`           显示尺寸: ${Math.round(canvasCheck.canvasInfo.displayWidth)}x${Math.round(canvasCheck.canvasInfo.displayHeight)}`);
-            console.log(`           位置: (${canvasCheck.canvasInfo.rectLeft}, ${canvasCheck.canvasInfo.rectTop})`);
-        }
-
-        if (canvasCheck.pixelCheck) {
-            console.log(`        🎨 Canvas 像素检查:`);
-            if (canvasCheck.pixelCheck.error) {
-                console.log(`           错误: ${canvasCheck.pixelCheck.error}`);
-            } else {
-                console.log(`           采样点: ${canvasCheck.pixelCheck.samplePoints} 个区域`);
-                console.log(`           非透明像素: ${canvasCheck.pixelCheck.nonTransparentPixels}/${canvasCheck.pixelCheck.totalPixels} (${(canvasCheck.pixelCheck.nonTransparentRatio * 100).toFixed(1)}%)`);
-                console.log(`           有色像素: ${canvasCheck.pixelCheck.coloredPixels}/${canvasCheck.pixelCheck.totalPixels} (${(canvasCheck.pixelCheck.coloredRatio * 100).toFixed(1)}%)`);
-            }
-        }
-
-        // 🔥 如果基本检查失败或内容检查失败，先截图报错，再重试
-        if (!canvasCheck.success || !canvasCheck.hasContent) {
-            const errorMsg = !canvasCheck.success
-                ? `Canvas 基本检查失败: ${canvasCheck.error}`
-                : 'Canvas 存在但没有渲染内容（空白）';
-
-            console.log(`        ❌ ${errorMsg}`);
-
-            // 🔥 1. 先截图
-            if (test && test.captureErrorScreenshot) {
-                await test.captureErrorScreenshot('canvas-load-failed', errorMsg);
-                console.log('        📸 已截图保存错误现场');
-            }
-
-            // 🔥 2. 标记测试失败（统计错误）
-            if (test && test.markPageTestFailed) {
-                test.markPageTestFailed(errorMsg);
-                console.log('        📝 已记录错误到测试报告');
-            }
-
-            // 🔥 3. 尝试刷新页面重新加载 Canvas
-            console.log('        🔄 尝试刷新页面重新加载 Canvas...');
-            await page.reload({ waitUntil: 'domcontentloaded' });
-            await page.waitForTimeout(5000);
-
-            // 🔥 4. 再次检查
-            const retryCheck = await checkCanvasLoaded(page, {
-                selector: '#turntable_canvas canvas',
-                timeout: 5000,
-                waitBeforeCheck: 2000,
-                checkPixels: true
-            });
-
-            if (retryCheck.success && retryCheck.hasContent) {
-                console.log('        ✅ 刷新后 Canvas 加载成功');
-            } else {
-                const retryError = !retryCheck.success
-                    ? `Canvas 基本检查失败: ${retryCheck.error}`
-                    : 'Canvas 仍然没有渲染内容';
-                console.log(`        ⚠️ 刷新后 Canvas 仍未加载: ${retryError}`);
-
-                // 🔥 再次截图和记录错误
-                if (test && test.captureErrorScreenshot) {
-                    await test.captureErrorScreenshot('canvas-load-failed-retry', retryError);
-                }
-                if (test && test.markPageTestFailed) {
-                    test.markPageTestFailed(`刷新后${retryError}`);
-                }
-            }
-        } else {
-            console.log('        ✅ Canvas 已成功加载（基本检查和内容检查都通过）');
-        }
+        // 🔥 不再在这里检查 Canvas，Canvas 检查会在"转盘旋转功能"用例中执行
+        // 🔥 标记转盘已初始化，可以执行子用例
+        auth.turntableInitialized = true;
+        auth.turntablePageFailed = false;
 
         console.log(`        ✅ ${actionName}完成`);
 

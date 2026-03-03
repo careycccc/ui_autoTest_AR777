@@ -19,6 +19,7 @@ import { handleSuperJackpotPopup } from './super-jackpot.js';
 import { handleCouponsPopup } from './coupons.js';
 import { handleWithdrawPopup } from '../menu/withdraw/withdraw-select.js';
 import { handleRechargeDialogPopup } from './recharge-dialog.js';
+import { handleRedPackRainPopup } from './red-pack-rain.js';
 
 /**
  * 根据断言文本获取对应的处理函数
@@ -45,6 +46,7 @@ export function getPopupHandler(assertText) {
         'Coupons': handleCouponsPopup,
         'Withdraw': handleWithdrawPopup,
         'Pay For The Order': handleRechargeDialogPopup,
+        'Red Pack Rain': handleRedPackRainPopup,  // 红包雨活动
 
         // 父用例页面，无需处理（已有专门的测试用例）
         'Promotions': null,      // 周卡月卡 - 活动资讯父用例
@@ -97,5 +99,6 @@ export {
     handleSuperJackpotPopup,
     handleCouponsPopup,
     handleWithdrawPopup,
-    handleRechargeDialogPopup
+    handleRechargeDialogPopup,
+    handleRedPackRainPopup
 };

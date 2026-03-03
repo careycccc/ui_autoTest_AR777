@@ -466,3 +466,35 @@ export async function processWithdraw(page, options = {}) {
         };
     }
 }
+
+
+/**
+ * 处理 Withdraw 弹窗（首页弹窗）
+ * @param {Page} page - Playwright page 对象
+ * @param {Object} auth - auth 对象
+ * @param {TestCase} test - TestCase 实例
+ * @returns {Promise<Object>} 返回处理结果
+ */
+export async function handleWithdrawPopup(page, auth, test) {
+    console.log('        🎯 处理 Withdraw 弹窗...');
+
+    try {
+        // Withdraw 弹窗通常会跳转到提现页面
+        // 这里只需要等待页面加载完成即可
+        await page.waitForTimeout(2000);
+
+        console.log('        ✅ Withdraw 弹窗处理完成');
+
+        return {
+            success: true,
+            message: 'Withdraw 弹窗已处理'
+        };
+
+    } catch (error) {
+        console.log(`        ❌ Withdraw 弹窗处理失败: ${error.message}`);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}

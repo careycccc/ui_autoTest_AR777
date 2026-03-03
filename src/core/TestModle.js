@@ -236,6 +236,12 @@ export class testModule {
     async _returnToParentTab(tab, maxAttempts = 3) {
         if (!tab) return false;
 
+        // 🔥 检查父用例是否已完成（邀请转盘特殊情况）
+        if (this.auth.turntableParentCaseCompleted && tab.name === '邀请转盘') {
+            console.log(`      ℹ️ 邀请转盘父用例已完成，跳过返回操作`);
+            return true;
+        }
+
         console.log(`      🔙 返回父用例: ${tab.name}`);
         console.log(`      🔍 验证选择器: ${tab.waitForSelector}`);
 
