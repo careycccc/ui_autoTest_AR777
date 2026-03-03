@@ -1,0 +1,25 @@
+# ============================================================
+# 3004版面 - 活动资讯元素
+# ============================================================
+
+# ----- 页面标识 -----
+activity_title:
+  selector: "text=Promotions"
+  backup: ".activity-title"
+  description: "活动资讯标题"
+
+# ----- 活动列表 -----
+activity_list:
+  selector: ".activity-list"
+  backup: "[data-testid='activity-list']"
+  description: "活动列表"
+
+activity_item:
+  selector: ".activity-item"
+  backup: ".promo-card"
+  description: "活动项"
+
+activity_card:
+  selector: ".activity-card"
+  backup: ".promotion-card"
+  description: "活动卡片"

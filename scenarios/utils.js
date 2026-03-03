@@ -1508,3 +1508,6 @@ export function printValidationResult(validationResult) {
 
     console.log('        ' + '='.repeat(50));
 }
+
+
+

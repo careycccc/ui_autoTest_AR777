@@ -10,6 +10,11 @@ reports/
 *.gif
 *.webp
 
+# Allure
+allure-results/
+allure-report/
+.allure/
+
 # Logs
 logs/
 *.log

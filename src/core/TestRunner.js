@@ -58,7 +58,11 @@ export class TestRunner {
 
     this.results.endTime = new Date();
     this.results.duration = this.results.endTime - this.results.startTime;
-    await this.reporter.generate(this.results);
+
+    // 生成 HTML 报告
+    const reportResult = await this.reporter.generate(this.results);
+    this.results.reportPath = reportResult.htmlPath;
+
     return this.results;
   }
 

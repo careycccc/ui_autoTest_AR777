@@ -4,9 +4,13 @@
   "description": "UI自动化测试平台 - 性能监控、网络采集、错误截图、精美报告",
   "type": "module",
   "scripts": {
-    "test": "node src/index.js",
-    "test:ui": "node src/index.js --ui",
-    "debug": "node src/index.js --ui"
+    "test": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js",
+    "test:ui": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js --ui",
+    "debug": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js --ui",
+    "test:3004": "BRAND_NAME=brand-3004 node src/index.js",
+    "test:3003": "BRAND_NAME=brand-3003 node src/index.js",
+    "test:3002": "BRAND_NAME=brand-3002 node src/index.js",
+    "test:all": "npm run test:3004 && npm run test:3003 && npm run test:3002"
   },
   "dependencies": {
     "@playwright/test": "^1.58.1",

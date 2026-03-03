@@ -219,6 +219,7 @@ export function registerTurntableCases(runner) {
         }
     }, {
         timeout: 30000
+        // 🔥 不需要 switchPage: true，因为 checkCashOutHistory 内部已经处理了返回逻辑
     });
 
     // 🔥 用例 4: 邀请按钮功能（放在旋转之前）
@@ -251,7 +252,8 @@ export function registerTurntableCases(runner) {
             throw error;
         }
     }, {
-        timeout: 60000
+        timeout: 60000,
+        switchPage: true  // 🔥 标记此用例会发生页面切换，执行完需要返回父页面
     });
 
     // 🔥 用例 5: 转盘旋转功能（放在最后，因为会进入下一轮活动）

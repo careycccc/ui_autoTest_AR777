@@ -1,6 +1,11 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { PerformanceAnalyzer } from '../utils/PerformanceAnalyzer.js';
+
+// ES 模块中获取 __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export class HTMLReporter {
   constructor(outputDir, config) {
@@ -259,10 +264,305 @@ export class HTMLReporter {
 
   async generate(results) {
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
-    const htmlPath = path.join(this.outputDir, `test-report-${ts}.html`);
-    fs.writeFileSync(htmlPath, this.generateHTML(results));
+    const reportDir = path.join(this.outputDir, `test-report-${ts}`);
+
+    // 创建报告目录
+    if (!fs.existsSync(reportDir)) {
+      fs.mkdirSync(reportDir, { recursive: true });
+    }
+
+    // 生成拆分的报告文件
+    const htmlPath = this.generateSplitHTML(results, reportDir, ts);
     console.log('\n📊 报告已生成:', htmlPath);
     return { htmlPath };
+  }
+
+  // 生成拆分的HTML报告
+  generateSplitHTML(results, reportDir, timestamp) {
+    const { suites } = results;
+
+    // 收集所有页面记录
+    const allPageRecords = [];
+    for (const suite of suites) {
+      if (suite.pageRecords) {
+        allPageRecords.push(...suite.pageRecords);
+      }
+    }
+
+    // 为每个页面的每个 tab 生成单独的HTML文件
+    allPageRecords.forEach((page, index) => {
+      // 生成性能 tab
+      const perfHtml = this.generateTabHTML(page, index, 'perf', reportDir);
+      fs.writeFileSync(path.join(reportDir, `page-${index}-perf.html`), perfHtml);
+
+      // 生成 API tab
+      const apiHtml = this.generateTabHTML(page, index, 'api', reportDir);
+      fs.writeFileSync(path.join(reportDir, `page-${index}-api.html`), apiHtml);
+
+      // 生成控制台 tab
+      const consoleHtml = this.generateTabHTML(page, index, 'console', reportDir);
+      fs.writeFileSync(path.join(reportDir, `page-${index}-console.html`), consoleHtml);
+
+      // 生成截图 tab
+      const screenshotsHtml = this.generateTabHTML(page, index, 'screenshots', reportDir);
+      fs.writeFileSync(path.join(reportDir, `page-${index}-screenshots.html`), screenshotsHtml);
+
+      // 生成页面主框架（包含 header 和 tab 按钮）
+      const pageHtml = this.generatePageFrameHTML(page, index);
+      fs.writeFileSync(path.join(reportDir, `page-${index}.html`), pageHtml);
+    });
+
+    // 生成主索引页面
+    const indexPath = path.join(reportDir, 'index.html');
+    const indexHtml = this.generateIndexHTML(results, allPageRecords);
+    fs.writeFileSync(indexPath, indexHtml);
+
+    return indexPath;
+  }
+
+  // 生成页面框架HTML
+  generatePageFrameHTML(page, index) {
+    const cssPath = path.join(__dirname, 'templates', 'report.css');
+    const cssContent = fs.existsSync(cssPath) ? fs.readFileSync(cssPath, 'utf-8') : '';
+
+    const apiRequests = page.apiRequests || [];
+    const apiErrors = page.apiErrors || [];
+    const consoleErrors = page.consoleErrors || [];
+    const screenshots = page.screenshots || [];
+
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${page.name || '页面 ' + (index + 1)}</title>
+  <style>${cssContent}</style>
+  <style>
+    body { margin: 0; padding: 0; background: white !important; min-height: auto !important; }
+    .page-section { display: block !important; margin: 0; box-shadow: none; border-radius: 0; }
+    .tab-content-frame { width: 100%; min-height: 600px; border: none; background: white; }
+  </style>
+</head>
+<body>
+  <div id="page-${index}" class="page-section active">
+    <div class="page-header">
+      <div class="page-title">📄 ${page.name || '页面 ' + (index + 1)}</div>
+      <div class="page-url">🔗 ${page.url || '未知路由'}</div>
+      <div class="page-meta">
+        <span>📱 ${page.device}</span>
+        <span>🕐 ${page.startTime ? new Date(page.startTime).toLocaleTimeString('zh-CN') : '00:00:00'}</span>
+        <span>📡 ${apiRequests.length} API</span>
+        ${apiErrors.length > 0 ? '<span style="color:#fca5a5;">🔴 ' + apiErrors.length + ' 错误</span>' : '<span style="color:#86efac;">✅ 无错误</span>'}
+        ${consoleErrors.length > 0 ? '<span style="color:#fca5a5;">💥 ' + consoleErrors.length + ' 控制台错误</span>' : ''}
+      </div>
+    </div>
+    <div class="section-tabs">
+      <button class="section-tab active" data-tab="perf">📊 性能</button>
+      <button class="section-tab" data-tab="api">🌐 API (${apiRequests.length})${apiErrors.length > 0 ? '<span class="badge">' + apiErrors.length + '</span>' : ''}</button>
+      <button class="section-tab" data-tab="console">💥 控制台 (${consoleErrors.length})${consoleErrors.length > 0 ? '<span class="badge">' + consoleErrors.length + '</span>' : ''}</button>
+      <button class="section-tab" data-tab="screenshots">📸 截图 (${screenshots.length})</button>
+    </div>
+    <iframe id="tab-content-frame" class="tab-content-frame" src="page-${index}-perf.html"></iframe>
+  </div>
+  <script>
+    document.querySelectorAll('.section-tab').forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        var tabName = this.getAttribute('data-tab');
+        document.querySelectorAll('.section-tab').forEach(function (t) {
+          t.classList.toggle('active', t.getAttribute('data-tab') === tabName);
+        });
+        document.getElementById('tab-content-frame').src = 'page-${index}-' + tabName + '.html';
+      });
+    });
+  </script>
+</body>
+</html>`;
+  }
+
+  // 生成单个 tab 的HTML内容
+  generateTabHTML(page, index, tabName, reportDir) {
+    const cssPath = path.join(__dirname, 'templates', 'report.css');
+    const cssContent = fs.existsSync(cssPath) ? fs.readFileSync(cssPath, 'utf-8') : '';
+
+    let content = '';
+    if (tabName === 'perf') {
+      content = this.generatePerfTabContent(page);
+    } else if (tabName === 'api') {
+      content = this.generateApiTabContent(page, index);
+    } else if (tabName === 'console') {
+      content = this.generateConsoleTabContent(page);
+    } else if (tabName === 'screenshots') {
+      content = this.generateScreenshotsTabContent(page);
+    }
+
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${tabName}</title>
+  <style>${cssContent}</style>
+  <style>body { margin: 0; padding: 24px; background: white; }</style>
+</head>
+<body>
+  ${content}
+  <script>
+    document.querySelectorAll('.issue-card').forEach(function (card) {
+      card.addEventListener('click', function () { this.classList.toggle('expanded'); });
+    });
+    document.querySelectorAll('.api-table tbody tr:not(.error-row)').forEach(function (row) {
+      row.addEventListener('click', function () {
+        var errorRowId = this.getAttribute('data-error-row');
+        if (errorRowId) {
+          var errorRow = document.getElementById(errorRowId);
+          if (errorRow) errorRow.classList.toggle('open');
+        }
+      });
+    });
+  </script>
+</body>
+</html>`;
+  }
+
+  // 生成性能 tab 内容
+  generatePerfTabContent(page) {
+    const perf = page.performanceData || {};
+    const wv = perf.webVitals || {};
+    const nav = perf.navigation || {};
+    const mem = perf.memory || {};
+    const dom = perf.dom || {};
+    const cpu = perf.cpu || {};
+    const fps = perf.fps || {};
+
+    return `
+      ${perf.isSPA ? this.generateMetricsSection('🎯 核心 Web Vitals', 'SPA页面指标', [
+      { key: 'CLS', value: wv.cls, unit: '', thresholds: { warning: 0.1, critical: 0.25 } },
+      { key: 'INP', value: wv.inp, unit: 'ms', thresholds: { warning: 200, critical: 500 } },
+      { key: 'TBT', value: perf.longTaskStats?.totalBlockingTime, unit: 'ms', thresholds: { warning: 200, critical: 600 } }
+    ]) : this.generateMetricsSection('🎯 核心 Web Vitals', '用户体验关键指标', [
+      { key: 'LCP', value: wv.lcp, unit: 'ms', thresholds: { warning: 2500, critical: 4000 } },
+      { key: 'FCP', value: wv.fcp, unit: 'ms', thresholds: { warning: 1800, critical: 3000 } },
+      { key: 'CLS', value: wv.cls, unit: '', thresholds: { warning: 0.1, critical: 0.25 } },
+      { key: 'INP', value: wv.inp, unit: 'ms', thresholds: { warning: 200, critical: 500 } },
+      { key: 'TTFB', value: wv.ttfb, unit: 'ms', thresholds: { warning: 800, critical: 1800 } },
+      { key: 'TBT', value: perf.longTaskStats?.totalBlockingTime, unit: 'ms', thresholds: { warning: 200, critical: 600 } }
+    ])}
+      ${perf.isSPA ? this.generateMetricsSection('⏱️ SPA 页面切换', '路由切换性能', [
+      { key: '切换耗时', value: perf.spaMetrics?.pageLoadTime, unit: 'ms', thresholds: { warning: 2000, critical: 5000 } },
+      { key: '长任务数', value: perf.longTaskStats?.count, unit: '', thresholds: { warning: 3, critical: 10 } },
+      { key: '最长阻塞', value: perf.longTaskStats?.maxDuration, unit: 'ms', thresholds: { warning: 100, critical: 200 } },
+      { key: '严重卡顿', value: perf.longTaskStats?.severeCount, unit: '次', thresholds: { warning: 1, critical: 3 } },
+      { key: '新资源数', value: perf.spaMetrics?.newResourcesCount, unit: '', thresholds: { warning: 20, critical: 50 } },
+      { key: '新资源大小', value: perf.spaMetrics?.newResourcesTotalSize ? Math.round(perf.spaMetrics.newResourcesTotalSize / 1024) : null, unit: 'KB', thresholds: { warning: 500, critical: 2000 } }
+    ]) : this.generateMetricsSection('⏱️ 加载时序', '各阶段耗时', [
+      { key: 'First Paint', value: perf.firstPaint || nav.firstPaint, unit: 'ms', thresholds: { warning: 1000, critical: 2000 } },
+      { key: 'DOM Ready', value: nav.domContentLoaded, unit: 'ms', thresholds: { warning: 2000, critical: 4000 } },
+      { key: 'Load', value: nav.loadEventEnd || nav.totalTime, unit: 'ms', thresholds: { warning: 3000, critical: 6000 } },
+      { key: 'DNS', value: nav.dnsTime, unit: 'ms', thresholds: { warning: 50, critical: 100 } },
+      { key: 'TCP', value: nav.tcpTime, unit: 'ms', thresholds: { warning: 100, critical: 200 } },
+      { key: 'Response', value: nav.responseTime || nav.downloadTime, unit: 'ms', thresholds: { warning: 200, critical: 500 } }
+    ])}
+      ${this.generateMetricsSection('💻 资源使用', '占用情况', [
+      { key: 'JS Heap', value: mem.usedJSHeapMB, unit: 'MB', thresholds: { warning: 50, critical: 100 } },
+      { key: 'DOM Nodes', value: dom.nodes, unit: '', thresholds: { warning: 1500, critical: 3000 } },
+      { key: 'Event Listeners', value: dom.jsEventListeners, unit: '', thresholds: { warning: 500, critical: 1000 } },
+      { key: 'CPU', value: cpu.usage, unit: '%', thresholds: { warning: 50, critical: 80 } },
+      { key: 'FPS', value: fps.current, unit: '', thresholds: { warning: 50, critical: 30 }, reverse: true },
+      { key: 'Layout Count', value: perf.render?.layoutCount, unit: '', thresholds: { warning: 50, critical: 100 } }
+    ])}
+      ${page.performanceData ? this.generateDetailedAnalysis(page.performanceData) : ''}
+    `;
+  }
+
+  // 生成 API tab 内容
+  generateApiTabContent(page, index) {
+    const apiRequests = page.apiRequests || [];
+    if (apiRequests.length === 0) {
+      return '<div class="empty-state"><div class="empty-state-icon">📡</div><p>暂无API请求</p></div>';
+    }
+    return `<div class="api-table-wrapper"><table class="api-table"><thead><tr><th>状态</th><th>方法</th><th>URL</th><th>耗时</th><th>大小</th></tr></thead><tbody>${apiRequests.map((req, ri) => this.renderApiRow(req, index, ri)).join('')}</tbody></table></div>`;
+  }
+
+  // 生成控制台 tab 内容
+  generateConsoleTabContent(page) {
+    const consoleErrors = page.consoleErrors || [];
+    if (consoleErrors.length === 0) {
+      return '<div class="empty-state"><div class="empty-state-icon">✅</div><p>暂无控制台错误</p></div>';
+    }
+    return `<div class="console-errors-wrapper">${this.renderConsoleErrors(consoleErrors)}</div>`;
+  }
+
+  // 生成截图 tab 内容
+  generateScreenshotsTabContent(page) {
+    const screenshots = page.screenshots || [];
+    if (screenshots.length === 0) {
+      return '<div class="empty-state"><div class="empty-state-icon">📷</div><p>暂无截图</p></div>';
+    }
+    return `<div class="screenshots-grid">${screenshots.map(ss => this.renderScreenshot(ss)).join('')}</div>`;
+  }
+
+  // 生成主索引页面
+  generateIndexHTML(results, allPageRecords) {
+    const { duration, apiErrors } = results;
+    const pageGroups = this.groupPagesByParent(allPageRecords);
+
+    const totalTests = allPageRecords.length;
+    let passedTests = 0, failedTests = 0;
+    allPageRecords.forEach(page => {
+      if (page.testFailed || page.errorScreenshotTaken || (page.apiErrors && page.apiErrors.length > 0)) {
+        failedTests++;
+      } else {
+        passedTests++;
+      }
+    });
+    const passRate = totalTests > 0 ? ((passedTests / totalTests) * 100).toFixed(1) : 0;
+
+    const cssPath = path.join(__dirname, 'templates', 'report.css');
+    const cssContent = fs.existsSync(cssPath) ? fs.readFileSync(cssPath, 'utf-8') : '';
+
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UI自动化测试报告</title>
+  <style>${cssContent}</style>
+  <style>.content-frame { width: 100%; min-height: 800px; border: none; background: white; border-radius: 16px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1); }</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🧪 UI 自动化测试报告</h1>
+      <div class="header-meta">📅 ${new Date().toLocaleString('zh-CN')} | ⏱️ ${(duration / 1000).toFixed(2)}s | 📄 ${allPageRecords.length} 个页面</div>
+    </div>
+    <div class="stats">
+      <div class="stat-card"><div class="stat-value">${totalTests}</div><div class="stat-label">总测试数</div></div>
+      <div class="stat-card stat-passed"><div class="stat-value">${passedTests}</div><div class="stat-label">✅ 通过</div></div>
+      <div class="stat-card stat-failed"><div class="stat-value">${failedTests}</div><div class="stat-label">❌ 失败</div></div>
+      <div class="stat-card stat-rate"><div class="stat-value">${passRate}%</div><div class="stat-label">通过率</div></div>
+      <div class="stat-card"><div class="stat-value">${allPageRecords.length}</div><div class="stat-label">📄 页面</div></div>
+      <div class="stat-card"><div class="stat-value">${apiErrors?.length || 0}</div><div class="stat-label">🔴 API错误</div></div>
+    </div>
+    <div class="page-nav">
+      <span style="color: #6b7280; font-weight: 500; padding: 10px;">📑 页面:</span>
+      ${this.renderPageNavigation(pageGroups)}
+    </div>
+    <iframe id="content-frame" class="content-frame" src="page-0.html"></iframe>
+  </div>
+  <script>
+    document.querySelectorAll('.page-nav-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var index = parseInt(this.getAttribute('data-index'));
+        if (!isNaN(index)) {
+          document.querySelectorAll('.page-nav-btn').forEach(function (b) { b.classList.remove('active'); });
+          this.classList.add('active');
+          document.getElementById('content-frame').src = 'page-' + index + '.html';
+        }
+      });
+    });
+  </script>
+</body>
+</html>`;
   }
 
   generateHTML(results) {

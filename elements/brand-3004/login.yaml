@@ -1,0 +1,63 @@
+# ============================================================
+# 3004版面 - 登录页元素
+# ============================================================
+
+# ----- 登录方式切换 -----
+login_switch_otp:
+  selector: "[data-testid='login-switch-otp']"
+  backup: "text=OTP"
+  description: "切换到OTP登录"
+
+# ----- 手机区号选择 -----
+login_phone_area:
+  selector: "[data-testid='login-phone-area']"
+  backup: ".phone-input"
+  description: "手机区号选择器"
+
+phone_area_code:
+  selector: "[data-testid='phone-area-code']"
+  backup: ".select span"
+  description: "当前区号显示"
+
+phone_area_list:
+  selector: "[data-testid='phone-area-list']"
+  backup: ".options-list"
+  description: "区号下拉列表"
+
+phone_area_option:
+  selector: "[data-testid^='phone-area-option-']"
+  backup: ".options-list li"
+  description: "区号选项"
+
+# ----- 输入框 -----
+phone_input:
+  selector: "[data-testid='form-input-userName']"
+  backup: "input[placeholder*='手机号']"
+  description: "手机号输入框"
+
+verify_code_input:
+  selector: "[data-testid='form-input-verifyCode']"
+  backup: "input[placeholder*='验证码']"
+  description: "验证码输入框"
+
+# ----- 按钮 -----
+send_code_btn:
+  selector: "[data-testid='login-send-code-btn']"
+  backup: "button:has-text('Send')"
+  description: "发送验证码按钮"
+
+login_submit_btn:
+  selector: "[data-testid='login-submit-btn']"
+  backup: "button:has-text('登录')"
+  description: "登录提交按钮"
+
+# ----- 登录成功标识 -----
+login_success_indicator:
+  selector: "[data-testid='user-info']"
+  backup: ".user-avatar"
+  description: "登录成功后的用户信息"
+
+user_avatar:
+  selector: ".user-avatar"
+  backup: "[data-testid='user-avatar']"
+  description: "用户头像"

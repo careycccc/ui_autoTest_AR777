@@ -1,11 +1,43 @@
 import { TestRunner } from './core/TestRunner.js';
-import config from '../config.js';
+import config, { dataConfig } from '../config.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
+
+// ============================================================
+// 🔥 多版面支持：读取 BRAND_NAME 环境变量
+// ============================================================
+const BRAND_NAME = process.env.BRAND_NAME || 'brand-3004';
+console.log(`\n🏢 当前版面: ${BRAND_NAME}`);
+
+// 动态加载版面配置
+let brandConfig = null;
+try {
+  const { ConfigLoader } = await import('../core/config-loader.js');
+  const configLoader = new ConfigLoader(BRAND_NAME);
+  await configLoader.load();
+  brandConfig = configLoader;
+
+  // 更新 dataConfig 中的 URL 和区号
+  dataConfig.url = brandConfig.getBaseURL();
+  const loginConfig = brandConfig.getLoginConfig();
+  dataConfig.areaCodeData = loginConfig.area_code;
+
+  // 如果有测试账号，更新
+  if (loginConfig.test_accounts && loginConfig.test_accounts.length > 0) {
+    dataConfig.userName = loginConfig.test_accounts[0].phone;
+  }
+
+  console.log(`📍 版面地址: ${dataConfig.url}`);
+  console.log(`📞 区号: ${dataConfig.areaCodeData}`);
+  console.log(`👤 测试账号: ${dataConfig.userName}`);
+} catch (error) {
+  console.warn(`⚠️  无法加载版面配置: ${error.message}`);
+  console.warn(`   将使用 config.js 中的默认配置`);
+}
 
 // ============================================================
 // 检测命令行参数
@@ -56,8 +88,9 @@ const runner = new TestRunner(config, rootDir);
 
 console.log('\n🧪 UI 自动化测试平台');
 console.log('══════════════════════════════════════════');
-console.log('� 运行模式: ' + (isUIMode ? '调试模式 (--ui)' : '正常模式'));
-console.log('� 测试文件: ' + testFiles.length + ' 个');
+console.log('🏢 测试版面: ' + BRAND_NAME);
+console.log('🎯 运行模式: ' + (isUIMode ? '调试模式 (--ui)' : '正常模式'));
+console.log('📝 测试文件: ' + testFiles.length + ' 个');
 console.log('📱 测试设备: ' + testDevices.join(', '));
 if (isUIMode) {
   console.log('⚠️  调试模式：不生成报告和截图');
@@ -83,7 +116,14 @@ runner.run(absoluteTestFiles, { devices: testDevices }).then(results => {
     console.log('   🟡 警告: ' + warning);
   }
 
-  console.log('══════════════════════════════════════════\n');
+  console.log('══════════════════════════════════════════');
+
+  // 🔥 打印报告路径
+  if (results.reportPath) {
+    console.log('\n📄 测试报告已生成:');
+    console.log('   ' + results.reportPath);
+    console.log('   在浏览器中打开查看详细报告\n');
+  }
 
   process.exit(results.failed > 0 ? 1 : 0);
 }).catch(err => {

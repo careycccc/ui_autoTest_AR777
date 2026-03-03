@@ -1,0 +1,110 @@
+# ============================================================
+# 3002版面配置文件
+# ============================================================
+
+project:
+  name: "3002版面"
+  code: "brand-3002"
+  base_url: "https://arplatsaassit2.club"
+  description: "3002版面 - 待配置"
+
+# 登录配置
+login:
+  type: "phone"
+  url: "/"
+  area_code: "91"
+  test_accounts:
+    - phone: "1380000000X"  # 请替换为实际测试账号
+      sms_code: "dynamic"
+
+# ============================================================
+# ⭐ 功能路由表
+# ============================================================
+feature_map:
+  
+  activity:
+    name: "活动资讯"
+    location: "home"
+    entry:
+      type: "tab"
+      element: "tab_activity"
+    description: "活动资讯页面"
+  
+  earn:
+    name: "新版返佣"
+    location: "home"
+    entry:
+      type: "tab"
+      element: "tab_promotion"
+    description: "新版返佣页面"
+  
+  menu:
+    name: "菜单"
+    location: "home"
+    entry:
+      type: "tab"
+      element: "tab_menu"
+    description: "菜单页面"
+  
+  turntable:
+    name: "邀请转盘"
+    location: "home"
+    entry:
+      type: "tab"
+      element: "tab_turntable"
+    description: "邀请转盘页面"
+  
+  home:
+    name: "家"
+    location: "home"
+    entry:
+      type: "tab"
+      element: "tab_home"
+    description: "首页"
+
+# ============================================================
+# ⭐ 导航配置
+# ============================================================
+navigation:
+  
+  home:
+    type: "tab"
+    element: "tab_home"
+    url: "/"
+  
+  activity:
+    type: "tab"
+    element: "tab_activity"
+    url: "/activity"
+  
+  promotion:
+    type: "tab"
+    element: "tab_promotion"
+    url: "/promotion"
+  
+  menu:
+    type: "tab"
+    element: "tab_menu"
+    url: "/menu"
+  
+  turntable:
+    type: "tab"
+    element: "tab_turntable"
+    url: "/turntable"
+
+# ============================================================
+# ⭐ 启用的功能列表
+# ============================================================
+enabled_features:
+  - activity
+  - earn
+  - menu
+  - turntable
+  - home
+
+# 额外配置
+extra:
+  has_gesture_password: false
+  has_dark_mode: false
+  default_language: "zh-CN"
+  device: "iphone14"

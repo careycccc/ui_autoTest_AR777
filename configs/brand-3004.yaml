@@ -1,0 +1,122 @@
+# ============================================================
+# 3004版面配置文件
+# ============================================================
+
+project:
+  name: "3004版面"
+  code: "brand-3004"
+  base_url: "https://arplatsaassit4.club"
+  description: "3004版面 - 主要测试版面"
+
+# 登录配置
+login:
+  type: "phone"
+  url: "/"
+  area_code: "91"
+  test_accounts:
+    - phone: "2028199712"
+      sms_code: "dynamic"
+
+# ============================================================
+# ⭐ 功能路由表
+# 定义每个功能在哪个页面，入口是什么
+# ============================================================
+feature_map:
+  
+  # 活动资讯
+  activity:
+    name: "活动资讯"
+    location: "home"
+    entry:
+      type: "tab"
+      element: "tab_activity"
+    description: "活动资讯页面"
+  
+  # 新版返佣
+  earn:
+    name: "新版返佣"
+    location: "home"
+    entry:
+      type: "tab"
+      element: "tab_promotion"
+    description: "新版返佣页面"
+  
+  # 菜单
+  menu:
+    name: "菜单"
+    location: "home"
+    entry:
+      type: "tab"
+      element: "tab_menu"
+    description: "菜单页面"
+  
+  # 邀请转盘
+  turntable:
+    name: "邀请转盘"
+    location: "home"
+    entry:
+      type: "tab"
+      element: "tab_turntable"
+    description: "邀请转盘页面"
+  
+  # 家/首页
+  home:
+    name: "家"
+    location: "home"
+    entry:
+      type: "tab"
+      element: "tab_home"
+    description: "首页"
+
+# ============================================================
+# ⭐ 导航配置
+# 定义如何从任意位置到达目标页面
+# ============================================================
+navigation:
+  
+  home:
+    type: "tab"
+    element: "tab_home"
+    url: "/"
+    description: "首页Tab"
+  
+  activity:
+    type: "tab"
+    element: "tab_activity"
+    url: "/activity"
+    description: "活动资讯Tab"
+  
+  promotion:
+    type: "tab"
+    element: "tab_promotion"
+    url: "/promotion"
+    description: "新版返佣Tab"
+  
+  menu:
+    type: "tab"
+    element: "tab_menu"
+    url: "/menu"
+    description: "菜单Tab"
+  
+  turntable:
+    type: "tab"
+    element: "tab_turntable"
+    url: "/turntable"
+    description: "邀请转盘Tab"
+
+# ============================================================
+# ⭐ 启用的功能列表
+# ============================================================
+enabled_features:
+  - activity
+  - earn
+  - menu
+  - turntable
+  - home
+
+# 额外配置
+extra:
+  has_gesture_password: false
+  has_dark_mode: false
+  default_language: "zh-CN"
+  device: "iphone14"

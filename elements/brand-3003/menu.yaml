@@ -1,0 +1,75 @@
+# ============================================================
+# 3004版面 - 菜单元素
+# ============================================================
+
+# ----- 菜单主要元素 -----
+menu_container:
+  selector: "#app #menu"
+  backup: ".menu-container"
+  description: "菜单容器"
+
+menu_uid:
+  selector: ".uid"
+  backup: "[data-testid='user-uid']"
+  description: "用户UID"
+
+menu_close_btn:
+  selector: ".close-btn"
+  backup: ".menu-close"
+  description: "菜单关闭按钮"
+
+# ----- 菜单项 -----
+menu_wallet:
+  selector: "text=Wallet"
+  backup: ".menu-wallet"
+  description: "钱包"
+
+menu_recharge:
+  selector: "text=Recharge"
+  backup: ".menu-recharge"
+  description: "充值"
+
+menu_withdraw:
+  selector: "text=Withdraw"
+  backup: ".menu-withdraw"
+  description: "提现"
+
+menu_balance_records:
+  selector: "text=Balance Records"
+  backup: ".menu-balance"
+  description: "余额记录"
+
+menu_account_security:
+  selector: "text=Account Security"
+  backup: ".menu-security"
+  description: "账户安全"
+
+menu_settings:
+  selector: "text=Settings"
+  backup: ".menu-settings"
+  description: "设置"
+
+menu_notifications:
+  selector: "text=Notifications"
+  backup: ".menu-notifications"
+  description: "通知"
+
+menu_coupons:
+  selector: "text=Coupons"
+  backup: ".menu-coupons"
+  description: "优惠券"
+
+menu_gifts:
+  selector: "text=Gifts"
+  backup: ".menu-gifts"
+  description: "礼品"
+
+menu_ranking:
+  selector: "text=Ranking"
+  backup: ".menu-ranking"
+  description: "排行榜"
+
+menu_live_support:
+  selector: "text=Live Support"
+  backup: ".menu-support"
+  description: "在线客服"

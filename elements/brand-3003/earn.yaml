@@ -1,0 +1,31 @@
+# ============================================================
+# 3004版面 - 新版返佣元素
+# ============================================================
+
+# ----- 页面标识 -----
+earn_title:
+  selector: "text=My Rewards"
+  backup: ".earn-title"
+  description: "新版返佣标题"
+
+# ----- Tab切换 -----
+my_rewards_tab:
+  selector: "text=My Rewards"
+  backup: ".my-rewards-tab"
+  description: "我的奖励Tab"
+
+invite_rewards_tab:
+  selector: "text=Invite Rewards"
+  backup: ".invite-rewards-tab"
+  description: "邀请奖励Tab"
+
+# ----- 内容区域 -----
+rewards_content:
+  selector: ".rewards-content"
+  backup: "[data-testid='rewards-content']"
+  description: "奖励内容区域"
+
+invite_button:
+  selector: "text=Invite"
+  backup: ".invite-btn"
+  description: "邀请按钮"

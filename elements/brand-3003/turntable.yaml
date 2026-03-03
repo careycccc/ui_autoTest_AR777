@@ -1,0 +1,142 @@
+# ============================================================
+# 3004版面 - 邀请转盘元素
+# ============================================================
+
+# ----- 转盘主要元素 -----
+turntable_canvas:
+  selector: "#turntable_canvas canvas"
+  backup: ".red-pack-canvas"
+  description: "转盘Canvas"
+
+turntable_title:
+  selector: "text=Invitation Wheel"
+  backup: ".turntable-title"
+  description: "转盘标题"
+
+# ----- 礼物选择 -----
+gift_list:
+  selector: ".gift_list"
+  backup: "[data-testid='gift-list']"
+  description: "礼物列表容器"
+
+gift_item:
+  selector: ".gift_item"
+  backup: ".gift-box"
+  description: "礼物盒"
+
+# ----- 转盘状态文本 -----
+cash_everyday_text:
+  selector: "text=Cash everyday"
+  backup: ".cash-everyday"
+  description: "Cash everyday文本"
+
+choose_reward_text:
+  selector: "text=Choose your reward"
+  backup: ".choose-reward"
+  description: "Choose your reward文本"
+
+congratulations_text:
+  selector: "text=Congratulations"
+  backup: ".congratulations"
+  description: "Congratulations文本"
+
+invitation_wheel_text:
+  selector: "text=Invitation Wheel"
+  backup: ".invitation-wheel"
+  description: "Invitation Wheel文本"
+
+invite_friends_text:
+  selector: "text=INVITE FRIENDS FOR REWARDS"
+  backup: ".invite-friends"
+  description: "INVITE FRIENDS文本"
+
+# ----- 按钮 -----
+cash_out_btn:
+  selector: ".cash_out"
+  backup: "button:has-text('CASH OUT')"
+  description: "CASH OUT按钮"
+
+invite_friends_btn:
+  selector: "text=INVITE FRIENDS"
+  backup: ".invite-btn"
+  description: "邀请好友按钮"
+
+rules_btn:
+  selector: "text=Rules"
+  backup: ".rules-btn"
+  description: "规则按钮"
+
+history_btn:
+  selector: "text=History"
+  backup: ".history-btn"
+  description: "历史记录按钮"
+
+# ----- 转盘信息 -----
+remain_count:
+  selector: ".remain_count"
+  backup: "[data-testid='remain-count']"
+  description: "剩余次数"
+
+scroll_num:
+  selector: ".scroll_num"
+  backup: "[data-testid='current-amount']"
+  description: "当前金额"
+
+total_prize:
+  selector: ".total_prize"
+  backup: "[data-testid='total-prize']"
+  description: "总奖金"
+
+# ----- 规则弹窗 -----
+rules_dialog:
+  selector: ".rules-dialog"
+  backup: "[data-testid='rules-dialog']"
+  description: "规则弹窗"
+
+rules_confirm_btn:
+  selector: "button:has-text('Confirm')"
+  backup: ".rules-confirm"
+  description: "规则确认按钮"
+
+# ----- 历史记录 -----
+history_list:
+  selector: ".history-list"
+  backup: "[data-testid='history-list']"
+  description: "历史记录列表"
+
+history_item:
+  selector: ".history-item"
+  backup: ".history-record"
+  description: "历史记录项"
+
+# ----- CASH OUT 弹窗 -----
+cashout_confirm_dialog:
+  selector: "text=Confirm"
+  backup: ".cashout-confirm"
+  description: "CASH OUT确认弹窗"
+
+cashout_success_dialog:
+  selector: "text=Success"
+  backup: ".cashout-success"
+  description: "CASH OUT成功弹窗"
+
+cashout_ok_btn:
+  selector: "button:has-text('OK')"
+  backup: ".cashout-ok"
+  description: "CASH OUT OK按钮"
+
+# ----- 邀请页面 -----
+invite_page_title:
+  selector: "text=Invite Friends"
+  backup: ".invite-title"
+  description: "邀请页面标题"
+
+invite_code:
+  selector: ".invite-code"
+  backup: "[data-testid='invite-code']"
+  description: "邀请码"
+
+copy_invite_btn:
+  selector: "button:has-text('Copy')"
+  backup: ".copy-btn"
+  description: "复制邀请码按钮"

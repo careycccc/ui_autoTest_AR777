@@ -1,0 +1,97 @@
+# ============================================================
+# 版面配置文件格式说明
+# 每个版面一个 yaml 文件，定义以下内容：
+#   1. 项目基本信息（名称、URL、登录方式）
+#   2. 功能路由表（每个功能在哪个页面、入口元素是什么）
+#   3. 导航配置（如何到达各个页面）
+#   4. 启用的功能列表（该版面有哪些功能）
+# ============================================================
+#
+# 关键概念：
+#   - feature_map：定义"功能"在哪个"页面"，入口元素叫什么
+#   - navigation：定义"页面"怎么到达（点Tab、点菜单、URL跳转等）
+#   - enabled_features：该版面启用了哪些功能
+#
+# 好处：
+#   - 新增版面时，只需新增配置 + 元素定位文件
+#   - 测试用例代码不需要任何修改
+#   - 功能位置变化时，只需改配置文件
+# ============================================================
+
+# 配置文件结构示例：
+
+project:
+  name: "版面名称"
+  code: "brand-xxxx"
+  base_url: "https://example.com"
+  description: "版面描述"
+
+login:
+  type: "phone"                        # phone | email | wechat | skip
+  url: "/login"                        # 登录页URL
+  area_code: "91"                      # 区号
+  test_accounts:
+    - phone: "13800000001"
+      password: "Test123456"
+      sms_code: "888888"
+
+# ============================================================
+# ⭐ 功能路由表
+# 定义每个功能在哪个页面，入口是什么
+# 测试用例通过 navigator.goToFeature('turntable') 自动导航
+# ============================================================
+feature_map:
+  
+  turntable:
+    name: "邀请转盘"
+    location: "home"                    # 在哪个页面（home/menu/activity等）
+    entry:
+      type: "tab"                       # tab | click | scroll-then-click | menu
+      element: "tab_turntable"          # 对应 elements/brand-xxxx/common.yaml 中的key
+    description: "邀请转盘功能"
+  
+  activity:
+    name: "活动资讯"
+    location: "home"
+    entry:
+      type: "tab"
+      element: "tab_activity"
+  
+  earn:
+    name: "新版返佣"
+    location: "home"
+    entry:
+      type: "tab"
+      element: "tab_promotion"
+
+# ============================================================
+# ⭐ 导航配置
+# 定义如何从任意位置到达目标页面
+# ============================================================
+navigation:
+  
+  home:
+    type: "tab"                        # tab | url | menu | sidebar
+    element: "tab_home"                # Tab元素的key
+    url: "/"                           # 备用：直接URL跳转
+  
+  menu:
+    type: "tab"
+    element: "tab_menu"
+    url: "/menu"
+
+# ============================================================
+# ⭐ 启用的功能列表
+# 未列出的功能将自动跳过测试
+# ============================================================
+enabled_features:
+  - turntable
+  - activity
+  - earn
+  - menu
+
+# 额外配置
+extra:
+  has_gesture_password: false          # 是否有手势密码
+  has_dark_mode: false                 # 是否支持暗黑模式
+  default_language: "zh-CN"

@@ -84,6 +84,7 @@ export async function tarbarComponentsRegester(test) {
         runner.registerTab('邀请转盘', {
             selector: '#turntable',
             pageName: '邀请转盘',
+            waitForSelector: 'text=Invitation Wheel',  // 🔥 添加验证选择器
             waitTime: 2000,
             collectPreviousPage: true,
 

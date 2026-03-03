@@ -1,0 +1,95 @@
+# ============================================================
+# 3004版面 - 公共元素定位
+# 包括：导航Tab、通用按钮、弹窗等
+# ============================================================
+
+# ----- 底部导航Tab -----
+tab_home:
+  selector: "#home"
+  backup: "text=Home"
+  description: "底部Tab-首页"
+
+tab_activity:
+  selector: "#activity"
+  backup: "text=Promotions"
+  description: "底部Tab-活动资讯"
+
+tab_promotion:
+  selector: "#promotion"
+  backup: "text=My Rewards"
+  description: "底部Tab-新版返佣"
+
+tab_menu:
+  selector: "#app #menu"
+  backup: ".menu-tab"
+  description: "底部Tab-菜单"
+
+tab_turntable:
+  selector: "#turntable"
+  backup: "text=Invitation Wheel"
+  description: "底部Tab-邀请转盘"
+
+# ----- 通用弹窗 -----
+dialog_confirm:
+  selector: "[data-testid='dialog-confirm']"
+  backup: "button:has-text('确定')"
+  description: "确认按钮"
+
+dialog_cancel:
+  selector: "[data-testid='dialog-cancel']"
+  backup: "button:has-text('取消')"
+  description: "取消按钮"
+
+toast_message:
+  selector: ".toast-message"
+  backup: ".van-toast"
+  description: "提示消息"
+
+loading_spinner:
+  selector: ".loading-spinner"
+  backup: ".van-loading"
+  description: "加载动画"
+
+# ----- 返回按钮 -----
+back_btn:
+  selector: ".ar_icon.back.back"
+  backup: "[data-testid='back-btn']"
+  description: "返回按钮"
+
+# ----- 菜单相关 -----
+menu_close_btn:
+  selector: ".close-btn"
+  backup: ".menu-close"
+  description: "菜单关闭按钮"
+
+menu_uid:
+  selector: ".uid"
+  backup: "[data-testid='user-uid']"
+  description: "用户UID"
+
+# ----- 首页弹窗 -----
+popup_content:
+  selector: ".popup-content"
+  backup: ".popup-mask"
+  description: "弹窗内容"
+
+popup_img:
+  selector: ".popup_img"
+  backup: ".popup-content img"
+  description: "弹窗图片"
+
+popup_close:
+  selector: ".popup-close"
+  backup: ".modal-close"
+  description: "弹窗关闭按钮"
+
+# ----- 红包雨 -----
+red_pack_container:
+  selector: ".red-pack-canvas-container"
+  backup: "[data-testid='red-pack-rain']"
+  description: "红包雨容器"
+
+red_pack_countdown:
+  selector: ".countdown_text"
+  backup: ".countdown-text"
+  description: "红包雨倒计时"

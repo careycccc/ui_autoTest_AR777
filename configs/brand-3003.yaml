@@ -1,0 +1,119 @@
+# ============================================================
+# 3003版面配置文件
+# ============================================================
+
+project:
+  name: "3003版面"
+  code: "brand-3003"
+  base_url: "https://arplatsaassit3.club"
+  description: "3003版面 - 待配置"
+
+# 登录配置
+login:
+  type: "phone"
+  url: "/"
+  area_code: "91"
+  test_accounts:
+    - phone: "1380000000X"  # 请替换为实际测试账号
+      sms_code: "dynamic"
+
+# ============================================================
+# ⭐ 功能路由表
+# 定义每个功能在哪个页面，入口是什么
+# 
+# 注意：3003版面的功能位置可能与3004不同
+# 例如：某功能在3004是独立Tab，在3003可能在菜单里
+# ============================================================
+feature_map:
+  
+  # 活动资讯
+  activity:
+    name: "活动资讯"
+    location: "home"                    # 请根据实际情况修改
+    entry:
+      type: "tab"                       # 请根据实际情况修改
+      element: "tab_activity"           # 请根据实际情况修改
+    description: "活动资讯页面"
+  
+  # 新版返佣
+  earn:
+    name: "新版返佣"
+    location: "home"                    # 请根据实际情况修改
+    entry:
+      type: "tab"
+      element: "tab_promotion"
+    description: "新版返佣页面"
+  
+  # 菜单
+  menu:
+    name: "菜单"
+    location: "home"
+    entry:
+      type: "tab"
+      element: "tab_menu"
+    description: "菜单页面"
+  
+  # 邀请转盘
+  turntable:
+    name: "邀请转盘"
+    location: "home"                    # 请根据实际情况修改（可能在menu里）
+    entry:
+      type: "tab"                       # 请根据实际情况修改
+      element: "tab_turntable"
+    description: "邀请转盘页面"
+  
+  # 家/首页
+  home:
+    name: "家"
+    location: "home"
+    entry:
+      type: "tab"
+      element: "tab_home"
+    description: "首页"
+
+# ============================================================
+# ⭐ 导航配置
+# ============================================================
+navigation:
+  
+  home:
+    type: "tab"
+    element: "tab_home"
+    url: "/"
+  
+  activity:
+    type: "tab"
+    element: "tab_activity"
+    url: "/activity"
+  
+  promotion:
+    type: "tab"
+    element: "tab_promotion"
+    url: "/promotion"
+  
+  menu:
+    type: "tab"
+    element: "tab_menu"
+    url: "/menu"
+  
+  turntable:
+    type: "tab"
+    element: "tab_turntable"
+    url: "/turntable"
+
+# ============================================================
+# ⭐ 启用的功能列表
+# ============================================================
+enabled_features:
+  - activity
+  - earn
+  - menu
+  - turntable
+  - home
+
+# 额外配置
+extra:
+  has_gesture_password: false
+  has_dark_mode: false
+  default_language: "zh-CN"
+  device: "iphone14"
