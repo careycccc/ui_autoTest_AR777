@@ -1,7 +1,7 @@
 /**
  * 活动资讯 - 子用例模块
  */
-import { verifyActivelist } from './promo.js';
+import { verifyActivelist, verifyActivityApiConsistency, verifyAllActivities } from './promo.js';
 
 /**
  * 注册活动资讯的所有子用例
@@ -10,4 +10,10 @@ import { verifyActivelist } from './promo.js';
 export function registerPromoCases(runner) {
     // 检查活动资讯有没有活动
     runner.registerCase('活动资讯', '检查活动资讯有没有活动', verifyActivelist);
+
+    // 验证活动资讯接口与页面一致性
+    runner.registerCase('活动资讯', '验证活动资讯接口与页面一致性', verifyActivityApiConsistency);
+
+    // 验证各个活动资讯活动
+    runner.registerCase('活动资讯', '验证各个活动资讯活动', verifyAllActivities);
 }

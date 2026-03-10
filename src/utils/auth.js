@@ -864,6 +864,199 @@ export class AuthHelper {
     }
 
     /**
+     * 🔥 智能识别当前显示的弹窗
+     * @param {Array} popupConfigs - 弹窗配置数组
+     * @param {Set} processedPopups - 已处理的弹窗集合
+     * @returns {Promise<Object>} 返回识别结果 { matched: boolean, config: Object, title: string, identifier: string, isSecondTime: boolean }
+     */
+    async _identifyCurrentPopup(popupConfigs, processedPopups) {
+        try {
+            // 🔥 优先通过金额按钮识别弹窗（最准确的标识）
+            let popupIdentifier = null;
+            const otherBtn = this.page.locator('.popup-content .otherBtn').first();
+            const otherBtnVisible = await otherBtn.isVisible({ timeout: 500 }).catch(() => false);
+
+            if (otherBtnVisible) {
+                const amount = await otherBtn.textContent().catch(() => null);
+                if (amount) {
+                    popupIdentifier = `amount:${amount.trim()}`;
+                    console.log(`        💰 弹窗金额: ${amount.trim()}`);
+
+                    // 🔥 检查是否已经处理过这个金额的弹窗
+                    if (processedPopups.has(popupIdentifier)) {
+                        console.log(`        🔄 检测到重复弹窗（相同金额），将直接关闭`);
+                        return {
+                            matched: true,
+                            config: null,
+                            title: '重复弹窗',
+                            identifier: popupIdentifier,
+                            isLuckyPackage: false,
+                            isSecondTime: true  // 🔥 标记为第二次遇到
+                        };
+                    }
+                }
+            }
+
+            // 🔥 如果没有金额按钮，尝试通过图片 src 识别
+            if (!popupIdentifier) {
+                const popupImg = this.page.locator('.popup-content img.popup_img').first();
+                const imgVisible = await popupImg.isVisible({ timeout: 500 }).catch(() => false);
+
+                if (imgVisible) {
+                    const imageSrc = await popupImg.getAttribute('src').catch(() => null);
+                    if (imageSrc) {
+                        popupIdentifier = `image:${imageSrc}`;
+                        console.log(`        🖼️ 弹窗图片: ${imageSrc}`);
+
+                        // 检查是否已经处理过这个图片的弹窗
+                        if (processedPopups.has(popupIdentifier)) {
+                            console.log(`        🔄 检测到重复弹窗（相同图片），将直接关闭`);
+                            return {
+                                matched: true,
+                                config: null,
+                                title: '重复弹窗',
+                                identifier: popupIdentifier,
+                                isLuckyPackage: false,
+                                isSecondTime: true
+                            };
+                        }
+                    }
+                }
+            }
+
+            // 1. 优先检查"幸运礼包"弹窗（通过特征文本识别）
+            const luckyPackageTexts = [
+                'View My Bonus',
+                'Lucky Jackpot',
+                'Welcome to',
+                "You're One of Today's Lucky Winners",
+                'Lucky Package'
+            ];
+
+            for (const text of luckyPackageTexts) {
+                const hasText = await this.page.getByText(text, { exact: false })
+                    .isVisible({ timeout: 500 })
+                    .catch(() => false);
+
+                if (hasText) {
+                    console.log(`        🎁 通过文本 "${text}" 识别为幸运礼包弹窗`);
+
+                    // 查找幸运礼包的配置
+                    const luckyConfig = popupConfigs.find(config =>
+                        config.title && (
+                            config.title.includes('幸运礼包') ||
+                            config.title.includes('Lucky') ||
+                            config.title.includes('Welcome')
+                        )
+                    );
+
+                    if (luckyConfig) {
+                        return {
+                            matched: true,
+                            config: luckyConfig,
+                            title: luckyConfig.title,
+                            identifier: popupIdentifier || 'lucky-package',
+                            isLuckyPackage: true,
+                            isSecondTime: false
+                        };
+                    } else {
+                        // 即使没有配置，也返回一个默认的幸运礼包处理配置
+                        return {
+                            matched: true,
+                            config: {
+                                title: '幸运礼包',
+                                popupInfo: {
+                                    jumpPageText: null // 幸运礼包不跳转
+                                }
+                            },
+                            title: '幸运礼包',
+                            identifier: popupIdentifier || 'lucky-package',
+                            isLuckyPackage: true,
+                            isSecondTime: false
+                        };
+                    }
+                }
+            }
+
+            // 2. 尝试通过弹窗内的文本内容匹配配置
+            for (const config of popupConfigs) {
+                // 尝试匹配标题
+                if (config.title) {
+                    const hasTitle = await this.page.getByText(config.title, { exact: false })
+                        .isVisible({ timeout: 500 })
+                        .catch(() => false);
+
+                    if (hasTitle) {
+                        console.log(`        ✅ 通过标题 "${config.title}" 匹配到弹窗配置`);
+                        return {
+                            matched: true,
+                            config: config,
+                            title: config.title,
+                            identifier: popupIdentifier || config.title,
+                            isLuckyPackage: false,
+                            isSecondTime: false
+                        };
+                    }
+                }
+
+                // 尝试匹配跳转页面文本
+                if (config.popupInfo?.jumpPageText) {
+                    const jumpText = config.popupInfo.jumpPageText;
+                    const hasJumpText = await this.page.getByText(jumpText, { exact: false })
+                        .isVisible({ timeout: 500 })
+                        .catch(() => false);
+
+                    if (hasJumpText) {
+                        console.log(`        ✅ 通过跳转文本 "${jumpText}" 匹配到弹窗配置`);
+                        return {
+                            matched: true,
+                            config: config,
+                            title: config.title,
+                            identifier: popupIdentifier || jumpText,
+                            isLuckyPackage: false,
+                            isSecondTime: false
+                        };
+                    }
+                }
+            }
+
+            // 3. 无法识别，但如果有标识符，也返回匹配成功
+            if (popupIdentifier) {
+                console.log(`        📋 无法识别弹窗类型，但检测到弹窗标识`);
+                return {
+                    matched: true,
+                    config: null,
+                    title: '未知弹窗',
+                    identifier: popupIdentifier,
+                    isLuckyPackage: false,
+                    isSecondTime: false
+                };
+            }
+
+            // 4. 完全无法识别
+            return {
+                matched: false,
+                config: null,
+                title: null,
+                identifier: null,
+                isLuckyPackage: false,
+                isSecondTime: false
+            };
+
+        } catch (error) {
+            console.log(`        ⚠️ 识别弹窗失败: ${error.message}`);
+            return {
+                matched: false,
+                config: null,
+                title: null,
+                identifier: null,
+                isLuckyPackage: false,
+                isSecondTime: false
+            };
+        }
+    }
+
+    /**
      * 🔥 循环检查并处理首页弹窗（通用函数）
      * 每次进入 Home 页面时都应该调用此函数
      * @param {number} maxChecks - 最大检查次数，默认 20
@@ -874,7 +1067,7 @@ export class AuthHelper {
 
         // 🔥 获取弹窗配置数据
         const popupConfigs = await this._getHomePopupConfig();
-        let currentPopupIndex = 0;
+        const processedPopups = new Set(); // 记录已处理的弹窗（通过 identifier）
 
         let popupCount = 0;
         let checkCount = 0;
@@ -933,26 +1126,62 @@ export class AuthHelper {
                     continue;
                 }
 
-                // 🔥 如果有弹窗配置数据，使用智能处理
-                if (popupConfigs.length > 0 && currentPopupIndex < popupConfigs.length) {
-                    const popupConfig = popupConfigs[currentPopupIndex];
-                    console.log(`        📋 使用配置数据处理弹窗 ${currentPopupIndex + 1}/${popupConfigs.length}`);
+                // 🔥 智能识别当前弹窗类型
+                const currentPopupInfo = await this._identifyCurrentPopup(popupConfigs, processedPopups);
 
-                    const smartSuccess = await this._handleSmartPopup(popupConfig);
+                if (currentPopupInfo.matched) {
+                    console.log(`        ✅ 识别到弹窗: ${currentPopupInfo.title || '未知'}`);
 
-                    if (!smartSuccess) {
-                        console.log(`        ⚠️ 智能处理失败，使用传统方式`);
-                        const closeSuccess = await this._tryClosePopup();
-                        if (!closeSuccess) {
-                            console.log(`        ⚠️ _tryClosePopup 失败，尝试 dismissOverlay`);
+                    // 🔥 如果是第二次遇到，直接点击关闭按钮
+                    if (currentPopupInfo.isSecondTime) {
+                        console.log(`        🔄 第二次遇到此弹窗，直接关闭`);
+                        const closeBtn = this.page.locator('.popup-content .popup-close').first();
+                        const closeBtnVisible = await closeBtn.isVisible({ timeout: 1000 }).catch(() => false);
+
+                        if (closeBtnVisible) {
+                            await closeBtn.click();
+                            console.log(`        ✅ 已点击关闭按钮`);
+                            await this.safeWait(500);
+                        } else {
+                            console.log(`        ⚠️ 未找到关闭按钮，使用传统方式`);
                             await this.dismissOverlay();
                         }
                     }
+                    // 🔥 特殊处理幸运礼包
+                    else if (currentPopupInfo.isLuckyPackage) {
+                        console.log(`        🎁 使用幸运礼包专用处理逻辑`);
+                        const luckySuccess = await this._handleLuckyPackagePopup();
 
-                    currentPopupIndex++;
+                        if (!luckySuccess) {
+                            console.log(`        ⚠️ 幸运礼包处理失败，使用传统方式`);
+                            const closeSuccess = await this._tryClosePopup();
+                            if (!closeSuccess) {
+                                console.log(`        ⚠️ _tryClosePopup 失败，尝试 dismissOverlay`);
+                                await this.dismissOverlay();
+                            }
+                        }
+                    } else {
+                        // 普通弹窗使用智能处理
+                        console.log(`        📋 使用配置数据处理弹窗`);
+                        const smartSuccess = await this._handleSmartPopup(currentPopupInfo.config);
+
+                        if (!smartSuccess) {
+                            console.log(`        ⚠️ 智能处理失败，使用传统方式`);
+                            const closeSuccess = await this._tryClosePopup();
+                            if (!closeSuccess) {
+                                console.log(`        ⚠️ _tryClosePopup 失败，尝试 dismissOverlay`);
+                                await this.dismissOverlay();
+                            }
+                        }
+                    }
+
+                    // 标记已处理
+                    if (currentPopupInfo.identifier) {
+                        processedPopups.add(currentPopupInfo.identifier);
+                    }
                 } else {
-                    // 🔥 没有配置数据，使用传统方式
-                    console.log(`        📋 使用传统方式处理弹窗`);
+                    // 🔥 无法识别，使用传统方式
+                    console.log(`        � 无法识别弹窗类型，使用传统方式处理`);
                     const closeSuccess = await this._tryClosePopup();
                     if (!closeSuccess) {
                         console.log(`        ⚠️ _tryClosePopup 失败，尝试 dismissOverlay`);

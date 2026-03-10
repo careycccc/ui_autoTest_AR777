@@ -107,4 +107,4 @@ extra:
   has_gesture_password: false
   has_dark_mode: false
   default_language: "zh-CN"
-  device: "iphone14"
+  device: "xiaomiRedmi"

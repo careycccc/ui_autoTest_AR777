@@ -179,6 +179,15 @@ export default {
       hasTouch: false
     },
 
+    xiaomiRedmi: {
+      name: 'Xiaomi Redmi Note 11',
+      viewport: { width: 393, height: 873 },
+      userAgent: 'Mozilla/5.0 (Linux; Android 11; 2201117TG Build/RKQ1.211001.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/145.0.7632.159 Mobile Safari/537.36',
+      deviceScaleFactor: 1,
+      isMobile: true,
+      hasTouch: false
+    },
+
     huaweiP60: {
       name: 'Huawei P60',
       viewport: { width: 360, height: 780 },
