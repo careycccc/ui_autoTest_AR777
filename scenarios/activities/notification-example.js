@@ -50,7 +50,7 @@ export async function notificationDirectCall(page, test) {
 
     try {
         // 假设已经在站内信页面，直接调用处理器
-        const { handleNotification } = await import('./activity-handlers.js');
+        const { handleNotification } = await import('./handlers/notification.js');
         const result = await handleNotification(page, test);
 
         if (result.success) {
