@@ -3,6 +3,8 @@
  * 包含通知权限开启的所有处理逻辑
  */
 
+import { findElement, elementExists } from '../../../src/utils/element-finder.js';
+
 /**
  * 通知权限开启活动主处理函数
  * @param {Object} page - Playwright page 对象
@@ -13,138 +15,164 @@ export async function handleNotificationPermission(page, test) {
     console.log('      🎯 处理通知权限开启活动...');
 
     try {
-        // 🔥 检查是否出现通知权限弹窗
-        const sheetPanel = page.locator('.sheet-panel');
-        const hasSheetPanel = await sheetPanel.isVisible({ timeout: 3000 }).catch(() => false);
-
-        if (!hasSheetPanel) {
+        // 🔥 使用项目级 findElement 查找通知权限弹窗
+        // 先在 .sheet-mask 容器内找，找不到则全局，最多重试两次
+        let notificationSheet;
+        try {
+            notificationSheet = await findElement(page, test, {
+                selector: '.sheet-panel',
+                hasText: 'Enable Notifications',
+                contextSelector: '.sheet-mask',
+                timeout: 5000
+            });
+        } catch (e) {
+            console.log(`      ❌ 未找到通知权限弹窗: ${e.message}`);
             return { success: false, reason: '未找到通知权限弹窗' };
         }
 
         console.log('      ✅ 发现通知权限弹窗');
 
-        // 🔥 验证弹窗标题
-        const panelTitle = await sheetPanel.locator('.bottom-head span').first().textContent().catch(() => '');
-        console.log(`      📋 弹窗标题: "${panelTitle}"`);
+        // 🔥 使用 elementExists 查找启用按钮，如果不存在则是只有关闭按钮的情况
+        console.log('      🔍 查找 "Enable Now & Claim" 按钮...');
+        const hasEnableButton = await elementExists(page, {
+            text: 'Enable Now & Claim',
+            contextSelector: '.sheet-mask',
+            timeout: 3000
+        });
 
-        if (!panelTitle.includes('Enable Notifications')) {
-            console.log('      ⚠️ 弹窗标题不匹配');
+        if (!hasEnableButton) {
+            console.log(`      ⚠️ 未找到 "Enable Now & Claim" 按钮，该活动可能是说明或已参与`);
+            console.log(`      👆 点击关闭按钮跳过本次活动...`);
+            
+            // 尝试点击多态关闭按钮 (SVG close, or any close class)
+            let closed = false;
+            const closeSelectors = [
+                '.sheet-mask .close.close',
+                '.sheet-mask .ar_icon.close',
+                '.sheet-panel .close',
+                '.close-icon',
+                'button.close'
+            ];
+            
+            for (const sel of closeSelectors) {
+                const btn = page.locator(sel).first();
+                if (await btn.isVisible({ timeout: 1000 }).catch(() => false)) {
+                    await btn.click();
+                    closed = true;
+                    console.log(`      ✅ 已点击关闭按钮 (${sel})`);
+                    break;
+                }
+            }
+            
+            if (!closed) {
+                console.log(`      ❌ 未找到可用的关闭按钮`);
+                return { success: false, reason: '无开启按钮且未找到关闭按钮' };
+            }
+            
+            await page.waitForTimeout(1000);
+            return { success: true, activityName: '通知权限开启', reason: '跳过无操作弹窗' };
         }
 
-        // 🔥 检查弹窗内容
-        const pushMessage = sheetPanel.locator('.pushMessage');
-        const hasPushMessage = await pushMessage.isVisible({ timeout: 2000 }).catch(() => false);
-
-        if (!hasPushMessage) {
-            console.log('      ⚠️ 未找到弹窗内容区域');
-        } else {
-            console.log('      ✅ 弹窗内容区域存在');
-        }
+        // 找到了启用按钮，获取并点击
+        const enableButton = await findElement(page, test, {
+            text: 'Enable Now & Claim',
+            contextSelector: '.sheet-mask',
+            timeout: 1000
+        });
 
         // 🔥 等待8秒
         console.log('      ⏳ 等待 8 秒...');
         await page.waitForTimeout(8000);
 
-        // 🔥 点击 "Enable Now & Claim" 按钮
-        const enableButton = pushMessage.locator('.btn.btn_main_style').filter({ hasText: 'Enable Now' });
-        const hasEnableButton = await enableButton.isVisible({ timeout: 2000 }).catch(() => false);
-
-        if (!hasEnableButton) {
-            console.log('      ❌ 未找到 "Enable Now & Claim" 按钮');
-            await test.captureScreenshot('notification-permission-no-button');
-            return { success: false, reason: '未找到启用按钮' };
-        }
-
         console.log('      👆 点击 "Enable Now & Claim" 按钮...');
         await enableButton.click();
         await page.waitForTimeout(2000);
 
-        // 🔥 检查是否出现奖励领取弹窗
+        // 🔥 检查后续是否有弹窗
         const receivedDialog = page.locator('.received-dialog');
         const hasReceivedDialog = await receivedDialog.isVisible({ timeout: 3000 }).catch(() => false);
+        
+        let rewardAmount = '';
 
         if (!hasReceivedDialog) {
-            console.log('      ⚠️ 未出现奖励领取弹窗');
-            await test.captureScreenshot('notification-permission-no-reward-dialog');
+            console.log('      ❌ 点击后未出现奖励领取弹窗');
+            await test.captureScreenshot('notification-permission-no-popup-error');
+            throw new Error('点击 Enable Now & Claim 按钮后未出现任何弹窗');
         } else {
             console.log('      ✅ 出现奖励领取弹窗');
 
             // 🔥 获取奖励金额
-            const rewardAmount = await receivedDialog.locator('.received-money').textContent().catch(() => '');
+            rewardAmount = await receivedDialog.locator('.received-money').textContent().catch(() => '');
             console.log(`      💰 奖励金额: ${rewardAmount}`);
 
             // 🔥 验证奖励文本
             const rewardText = await receivedDialog.locator('.received-text').textContent().catch(() => '');
             console.log(`      📝 奖励文本: "${rewardText}"`);
-        }
 
-        // 🔥 点击 "Bet Now" 按钮
-        const betNowButton = receivedDialog.locator('.receive-btn').filter({ hasText: 'Bet Now' });
-        const hasBetNowButton = await betNowButton.isVisible({ timeout: 2000 }).catch(() => false);
+            // 🔥 点击 "Bet Now" 按钮
+            const betNowButton = receivedDialog.locator('.receive-btn').filter({ hasText: 'Bet Now' });
+            const hasBetNowButton = await betNowButton.isVisible({ timeout: 2000 }).catch(() => false);
 
-        if (!hasBetNowButton) {
-            console.log('      ⚠️ 未找到 "Bet Now" 按钮');
-            // 尝试点击关闭按钮
-            const closeIcon = receivedDialog.locator('.close-icon');
-            const hasCloseIcon = await closeIcon.isVisible({ timeout: 1000 }).catch(() => false);
-            if (hasCloseIcon) {
-                console.log('      👆 点击关闭按钮...');
-                await closeIcon.click();
-                await page.waitForTimeout(1000);
-            }
-        } else {
-            console.log('      👆 点击 "Bet Now" 按钮...');
-
-            // 记录点击前的 URL
-            const beforeUrl = page.url();
-            console.log(`      📍 点击前 URL: ${beforeUrl}`);
-
-            await betNowButton.click();
-            await page.waitForTimeout(2000);
-
-            // 记录点击后的 URL
-            const afterUrl = page.url();
-            console.log(`      📍 点击后 URL: ${afterUrl}`);
-
-            // 🔥 检查是否跳转到首页
-            const isHomePage = afterUrl.includes('arplatsaassit4.club') &&
-                (afterUrl.endsWith('/') || afterUrl.includes('/home') || afterUrl.split('/').length <= 4);
-
-            if (isHomePage) {
-                console.log('      ✅ 已跳转到首页');
-
-                // 🔥 处理首页弹窗
-                console.log('      🔄 检查并处理首页弹窗...');
-                const homePopupResult = await handleHomePopups(page, test);
-
-                if (homePopupResult.processed) {
-                    console.log(`      ✅ 处理了 ${homePopupResult.count} 个首页弹窗`);
+            if (!hasBetNowButton) {
+                console.log('      ⚠️ 未找到 "Bet Now" 按钮');
+                // 尝试点击关闭按钮
+                const closeIcon = receivedDialog.locator('.close-icon');
+                const hasCloseIcon = await closeIcon.isVisible({ timeout: 1000 }).catch(() => false);
+                if (hasCloseIcon) {
+                    console.log('      👆 点击关闭按钮...');
+                    await closeIcon.click();
+                    await page.waitForTimeout(1000);
                 }
-
-                // 🔥 返回到活动资讯页面
-                console.log('      ↩️ 返回到活动资讯页面...');
-                const returnResult = await returnToActivityPage(page, test);
-
-                if (!returnResult.success) {
-                    console.log('      ❌ 返回活动资讯页面失败');
-                    await test.captureScreenshot('notification-permission-return-failed');
-
-                    // 🔥 强制跳转到活动资讯页面
-                    console.log('      🔄 强制跳转到活动资讯页面...');
-                    await forceNavigateToActivity(page, test);
-
-                    return {
-                        success: false,
-                        error: '返回活动资讯失败，已强制跳转',
-                        rewardAmount: rewardAmount
-                    };
-                }
-
-                console.log('      ✅ 成功返回活动资讯页面');
-
             } else {
-                console.log('      ⚠️ 未跳转到首页，当前页面可能不正确');
-                console.log(`      📍 当前 URL: ${afterUrl}`);
+                console.log('      👆 点击 "Bet Now" 按钮...');
+
+                // 记录点击前的 URL
+                const beforeUrl = page.url();
+                console.log(`      📍 点击前 URL: ${beforeUrl}`);
+
+                await betNowButton.click();
+                await page.waitForTimeout(2000);
+
+                // 记录点击后的 URL
+                const afterUrl = page.url();
+                console.log(`      📍 点击后 URL: ${afterUrl}`);
+
+                // 🔥 检查是否跳转到首页
+                const isHomePage = afterUrl.includes('arplatsaassit4.club') &&
+                    (afterUrl.endsWith('/') || afterUrl.includes('/home') || afterUrl.split('/').length <= 4);
+
+                if (isHomePage) {
+                    console.log('      ✅ 已跳转到首页');
+
+                    // 🔥 处理首页弹窗
+                    console.log('      🔄 检查并处理首页弹窗...');
+                    await handleHomePopups(page, test);
+
+                    // 🔥 返回到活动资讯页面
+                    console.log('      ↩️ 返回到活动资讯页面...');
+                    const returnResult = await returnToActivityPage(page, test);
+
+                    if (!returnResult.success) {
+                        console.log('      ❌ 返回活动资讯页面失败');
+                        await test.captureScreenshot('notification-permission-return-failed');
+
+                        // 🔥 强制跳转到活动资讯页面
+                        console.log('      🔄 强制跳转到活动资讯页面...');
+                        await forceNavigateToActivity(page, test);
+
+                        return {
+                            success: false,
+                            error: '返回活动资讯失败，已强制跳转',
+                            rewardAmount: rewardAmount
+                        };
+                    }
+
+                    console.log('      ✅ 成功返回活动资讯页面');
+
+                } else {
+                    console.log('      ⚠️ 未跳转到首页，当前页面可能不正确');
+                    console.log(`      📍 当前 URL: ${afterUrl}`);
+                }
             }
         }
 

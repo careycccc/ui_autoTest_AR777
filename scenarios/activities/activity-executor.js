@@ -9,6 +9,7 @@
  */
 
 import { identifyAndExecuteActivity } from './activity-registry.js';
+import { elementExists } from '../../src/utils/element-finder.js';
 
 /**
  * 🔥 通用活动执行器
@@ -78,62 +79,32 @@ export async function executeActivity(options) {
         if (!urlChanged && clickSelector) {
             console.log(`      🔍 检查是否有弹窗...`);
 
-            const popupSelectors = [
-                '.popup-container',
-                '.popup-content',
-                '.modal',
-                '.dialog',
-                '[class*="popup"]'
+            // 🔥 使用 elementExists 按优先级逐一检测弹窗
+            const popupChecks = [
+                // 通知权限弹窗（Enable Notifications sheet）
+                { selector: '.sheet-mask',     timeout: 1500 },
+                { selector: '.sheet-panel',    timeout: 1500 },
+                // 常规弹窗
+                { selector: '.popup-container', timeout: 1000 },
+                { selector: '.popup-content',   timeout: 1000 },
+                { selector: '.modal',           timeout: 1000 },
+                { selector: '.dialog',          timeout: 1000 },
+                { selector: '[class*="popup"]', timeout: 1000 },
             ];
 
-            for (const selector of popupSelectors) {
-                const popupVisible = await page.locator(selector)
-                    .first()
-                    .isVisible({ timeout: 1000 })
-                    .catch(() => false);
-
-                if (popupVisible) {
+            for (const check of popupChecks) {
+                const found = await elementExists(page, { selector: check.selector, timeout: check.timeout });
+                if (found) {
                     hasPopup = true;
-                    console.log(`      ✅ 检测到弹窗: ${selector}`);
+                    console.log(`      ✅ 检测到弹窗: ${check.selector}`);
                     break;
                 }
             }
 
             if (hasPopup) {
-                // 点击弹窗中的按钮
-                console.log(`      👆 点击弹窗中的按钮...`);
-
-                const buttonSelectors = [
-                    '.popup-confirm',
-                    '.confirm-btn',
-                    '.modal-confirm',
-                    'button:has-text("确认")',
-                    'button:has-text("Confirm")',
-                    'button:has-text("OK")',
-                    'button'
-                ];
-
-                let buttonClicked = false;
-                for (const btnSelector of buttonSelectors) {
-                    try {
-                        const btn = page.locator(btnSelector).first();
-                        const btnVisible = await btn.isVisible({ timeout: 500 }).catch(() => false);
-
-                        if (btnVisible) {
-                            await btn.click();
-                            console.log(`      ✅ 点击了按钮: ${btnSelector}`);
-                            buttonClicked = true;
-                            await page.waitForTimeout(1000);
-                            break;
-                        }
-                    } catch (e) {
-                        continue;
-                    }
-                }
-
-                if (!buttonClicked) {
-                    console.log(`      ⚠️ 未找到可点击的弹窗按钮`);
-                }
+                // 🔥 检浌到弹窗，直接交给 identifyAndExecuteActivity 来识别和处理
+                // 不要在这里乱点按鈕，否则会干扰后续的活动识别
+                console.log(`      ✅ 检浌到弹窗，将交给活动识别器处理`);
             } else if (clickSelector) {
                 // 既没有 URL 变化也没有弹窗
                 console.log(`      ⚠️ 点击后既无 URL 变化也无弹窗`);

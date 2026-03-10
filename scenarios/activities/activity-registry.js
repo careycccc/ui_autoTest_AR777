@@ -4,6 +4,7 @@
  */
 
 import * as handlers from './handlers/index.js';
+import { elementExists } from '../../src/utils/element-finder.js';
 
 /**
  * 活动注册表
@@ -183,6 +184,20 @@ export const ACTIVITY_REGISTRY = {
         handler: handlers.handleMembershipCard
     },
 
+    // 通知权限开启（优先级高，放在站内信前面）
+    'notification-permission': {
+        id: 'notification-permission',
+        name: '通知权限开启',
+        identifiers: [
+            { type: 'text', value: 'Enable Notifications' },
+            { type: 'text', value: 'Enable Now & Claim' },
+            { type: 'selector', value: '.sheet-panel' },
+            { type: 'selector', value: '.pushMessage' },
+            { type: 'selector', value: '.received-dialog' }
+        ],
+        handler: handlers.handleNotificationPermission
+    },
+
     // 站内信
     'notification': {
         id: 'notification',
@@ -199,20 +214,6 @@ export const ACTIVITY_REGISTRY = {
             { type: 'selector', value: '.van-list .item' }           // 🔥 消息项
         ],
         handler: handlers.handleNotification
-    },
-
-    // 通知权限开启
-    'notification-permission': {
-        id: 'notification-permission',
-        name: '通知权限开启',
-        identifiers: [
-            { type: 'text', value: 'Enable Notifications' },
-            { type: 'text', value: 'Enable Now & Claim' },
-            { type: 'selector', value: '.sheet-panel' },
-            { type: 'selector', value: '.pushMessage' },
-            { type: 'selector', value: '.received-dialog' }
-        ],
-        handler: handlers.handleNotificationPermission
     },
 
     // 充值转盘
@@ -280,9 +281,71 @@ export async function identifyActivity(page, currentUrl) {
     console.log(`      🔍 识别当前活动...`);
     console.log(`      📍 当前 URL: ${currentUrl}`);
 
+    // 🔥 调试：输出页面上的主要文本内容
+    try {
+        const pageText = await page.textContent('body').catch(() => '');
+        const textSnippet = pageText.substring(0, 200).replace(/\s+/g, ' ').trim();
+        console.log(`      📝 页面文本片段: "${textSnippet}..."`);
+
+        // 检查是否包含关键文本
+        if (pageText.includes('Enable Notifications')) {
+            console.log(`      🎯 页面包含 "Enable Notifications" 文本`);
+        }
+        if (pageText.includes('Enable Now & Claim')) {
+            console.log(`      🎯 页面包含 "Enable Now & Claim" 文本`);
+        }
+    } catch (e) {
+        console.log(`      ⚠️ 无法获取页面文本: ${e.message}`);
+    }
+
     const activities = getAllActivities();
 
+    // 🔥 优先检查通知权限开启活动（因为它是弹窗形式，需要优先检测）
+    const notificationPermissionActivity = activities.find(a => a.id === 'notification-permission');
+    if (notificationPermissionActivity) {
+        console.log(`      🔍 优先检查: ${notificationPermissionActivity.name}`);
+
+        try {
+            // 🔥 使用 elementExists 查找弹窗标题，先在 .sheet-mask 内找，找不到再全局
+            const hasNotificationTitle = await elementExists(page, {
+                selector: '.sheet-panel',
+                hasText: 'Enable Notifications',
+                contextSelector: '.sheet-mask',
+                timeout: 3000
+            });
+
+            if (hasNotificationTitle) {
+                console.log(`      ✅ 通过弹窗标题 "Enable Notifications" 识别为: ${notificationPermissionActivity.name}`);
+                return notificationPermissionActivity;
+            }
+
+            // 备用：直接查找按钮文字
+            const hasClaimButton = await elementExists(page, {
+                text: 'Enable Now & Claim',
+                contextSelector: '.sheet-mask',
+                timeout: 2000
+            });
+
+            if (hasClaimButton) {
+                console.log(`      ✅ 通过按钮文字 "Enable Now & Claim" 识别为: ${notificationPermissionActivity.name}`);
+                return notificationPermissionActivity;
+            }
+
+            console.log(`      ❌ 未找到通知权限开启活动的特征文本`);
+        } catch (error) {
+            console.log(`      ⚠️ 检查通知权限开启活动时出错: ${error.message}`);
+        }
+    }
+
+    // 🔥 如果不是通知权限开启活动，继续检查其他活动
     for (const activity of activities) {
+        // 跳过已经检查过的通知权限开启活动
+        if (activity.id === 'notification-permission') {
+            continue;
+        }
+
+        console.log(`      🔍 尝试识别: ${activity.name}`);
+
         // 尝试每个识别器
         for (const identifier of activity.identifiers) {
             let matched = false;
@@ -297,16 +360,51 @@ export async function identifyActivity(page, currentUrl) {
                         break;
 
                     case 'text':
-                        const hasText = await page.getByText(identifier.value, { exact: false })
-                            .isVisible({ timeout: 2000 })
+                        console.log(`      🔍 查找文本: "${identifier.value}"`);
+
+                        // 方法1: 使用 getByText
+                        let hasText = await page.getByText(identifier.value, { exact: false })
+                            .isVisible({ timeout: 1000 })
                             .catch(() => false);
+
+                        if (hasText) {
+                            console.log(`      ✅ 方法1成功: getByText`);
+                        }
+
+                        // 方法2: 如果方法1失败，使用 locator 查找包含文本的元素
+                        if (!hasText) {
+                            hasText = await page.locator(`text=${identifier.value}`)
+                                .first()
+                                .isVisible({ timeout: 1000 })
+                                .catch(() => false);
+
+                            if (hasText) {
+                                console.log(`      ✅ 方法2成功: text=`);
+                            }
+                        }
+
+                        // 方法3: 如果方法2失败，使用通配符查找
+                        if (!hasText) {
+                            hasText = await page.locator(`*:has-text("${identifier.value}")`)
+                                .first()
+                                .isVisible({ timeout: 1000 })
+                                .catch(() => false);
+
+                            if (hasText) {
+                                console.log(`      ✅ 方法3成功: *:has-text`);
+                            }
+                        }
+
                         if (hasText) {
                             matched = true;
                             console.log(`      ✅ 通过文本 "${identifier.value}" 识别为: ${activity.name}`);
+                        } else {
+                            console.log(`      ❌ 未找到文本: "${identifier.value}"`);
                         }
                         break;
 
                     case 'selector':
+                        console.log(`      🔍 查找选择器: "${identifier.value}"`);
                         const hasSelector = await page.locator(identifier.value)
                             .first()
                             .isVisible({ timeout: 2000 })
@@ -314,6 +412,8 @@ export async function identifyActivity(page, currentUrl) {
                         if (hasSelector) {
                             matched = true;
                             console.log(`      ✅ 通过选择器 "${identifier.value}" 识别为: ${activity.name}`);
+                        } else {
+                            console.log(`      ❌ 未找到选择器: "${identifier.value}"`);
                         }
                         break;
 
@@ -330,10 +430,12 @@ export async function identifyActivity(page, currentUrl) {
                 }
 
                 if (matched) {
+                    console.log(`      🎯 最终识别结果: ${activity.name}`);
                     return activity;
                 }
 
             } catch (error) {
+                console.log(`      ⚠️ 识别器错误: ${error.message}`);
                 continue;
             }
         }

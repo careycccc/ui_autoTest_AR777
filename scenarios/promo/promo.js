@@ -89,10 +89,14 @@ export async function handleActivityClick(options) {
         let matchedActivity = null;
 
         if (!urlChanged) {
-            // 🔥 URL 未变化，检查是否有弹窗
+            // 🔥 URL 未变化，检查是否有弹窗（使用项目级 elementExists 风格，手写版）
             console.log(`      🔍 检查是否有弹窗...`);
 
             const popupSelectors = [
+                '.sheet-mask',        // 🔥 通知权限弹窗（Enable Notifications sheet）
+                '.sheet-panel',       // 🔥 sheet 弹窗面板
+                '.pushMessage',       // 🔥 推送消息弹窗内容
+                '.received-dialog',   // 🔥 领取成功弹窗
                 '.popup-container',
                 '.popup-content',
                 '.modal',
@@ -103,7 +107,7 @@ export async function handleActivityClick(options) {
             for (const selector of popupSelectors) {
                 const popupVisible = await page.locator(selector)
                     .first()
-                    .isVisible({ timeout: 1000 })
+                    .isVisible({ timeout: 1500 })
                     .catch(() => false);
 
                 if (popupVisible) {
@@ -114,47 +118,20 @@ export async function handleActivityClick(options) {
             }
 
             if (hasPopup) {
-                // 🔥 有弹窗，点击弹窗中的按钮
-                console.log(`      👆 点击弹窗中的按钮...`);
+                // 🔥 检测到弹窗，交给活动注册表来识别和处理
+                console.log(`      🔍 识别弹窗活动类型并处理...`);
+                const { identifyAndExecuteActivity } = await import('../activities/activity-registry.js');
+                matchedActivity = await identifyAndExecuteActivity(page, test);
 
-                const buttonSelectors = [
-                    '.popup-confirm',
-                    '.confirm-btn',
-                    '.modal-confirm',
-                    'button:has-text("确认")',
-                    'button:has-text("Confirm")',
-                    'button:has-text("OK")',
-                    'button'
-                ];
-
-                let buttonClicked = false;
-                for (const btnSelector of buttonSelectors) {
-                    try {
-                        const btn = page.locator(btnSelector).first();
-                        const btnVisible = await btn.isVisible({ timeout: 500 }).catch(() => false);
-
-                        if (btnVisible) {
-                            await btn.click();
-                            console.log(`      ✅ 点击了按钮: ${btnSelector}`);
-                            buttonClicked = true;
-                            await page.waitForTimeout(1000);
-                            break;
-                        }
-                    } catch (e) {
-                        continue;
-                    }
+                if (matchedActivity && matchedActivity.success) {
+                    console.log(`      ✅ 弹窗活动处理成功: ${matchedActivity.activityName}`);
+                } else {
+                    console.log(`      ⚠️ 弹窗活动处理失败或未识别: ${matchedActivity?.error || '未知'}`);
                 }
 
-                if (!buttonClicked) {
-                    console.log(`      ⚠️ 未找到可点击的弹窗按钮`);
-                }
-
-                // 点击弹窗按钮后，再次检查 URL
+                // 点击弹窗后再次检查 URL
                 const afterPopupUrl = page.url();
-                console.log(`      📍 点击弹窗按钮后 URL: ${afterPopupUrl}`);
-
-                // 🔥 在弹窗后的页面匹配活动
-                matchedActivity = await matchActivity(page, afterPopupUrl);
+                console.log(`      📍 处理弹窗后 URL: ${afterPopupUrl}`);
 
             } else {
                 // 🔥 没有弹窗也没有跳转，可能是无效点击
@@ -180,67 +157,81 @@ export async function handleActivityClick(options) {
             throw new Error(`活动 #${index} 未匹配到任何已知活动类型`);
         }
 
-        console.log(`      ✅ 匹配到活动: ${matchedActivity.name}`);
+        const activityName = matchedActivity.name || matchedActivity.activityName;
+        console.log(`      ✅ 匹配到活动: ${activityName}`);
         console.log(`      📋 活动类型: ${hasPopup ? '弹窗类型' : '直接跳转类型'}`);
 
-        // 7. 等待目标页面加载完成
-        console.log(`      ⏳ 等待目标页面加载...`);
-        const targetConfig = matchedActivity.targetPageConfig;
+        // 如果是通过 identifyAndExecuteActivity 处理的弹窗，此时它已经接管了具体的点击和交互流程
+        if (!matchedActivity.activityId) {
+            // 7. 等待目标页面加载完成
+            console.log(`      ⏳ 等待目标页面加载...`);
+            const targetConfig = matchedActivity.targetPageConfig;
 
-        if (targetConfig.waitForSelector) {
-            const selectors = targetConfig.waitForSelector.split(',').map(s => s.trim());
-            let selectorFound = false;
+            if (targetConfig && targetConfig.waitForSelector) {
+                const selectors = targetConfig.waitForSelector.split(',').map(s => s.trim());
+                let selectorFound = false;
 
-            for (const selector of selectors) {
-                const exists = await page.locator(selector)
-                    .first()
-                    .isVisible({ timeout: 3000 })
-                    .catch(() => false);
+                for (const selector of selectors) {
+                    const exists = await page.locator(selector)
+                        .first()
+                        .isVisible({ timeout: 3000 })
+                        .catch(() => false);
 
-                if (exists) {
-                    console.log(`      ✅ 找到目标元素: ${selector}`);
-                    selectorFound = true;
-                    break;
+                    if (exists) {
+                        console.log(`      ✅ 找到目标元素: ${selector}`);
+                        selectorFound = true;
+                        break;
+                    }
+                }
+
+                if (!selectorFound) {
+                    console.log(`      ⚠️ 未找到目标元素，但继续执行`);
                 }
             }
 
-            if (!selectorFound) {
-                console.log(`      ⚠️ 未找到目标元素，但继续执行`);
+            if (targetConfig) {
+                await page.waitForTimeout(targetConfig.waitTime || 1000);
             }
+
+            // 8. 执行自定义处理函数（如果有）
+            if (matchedActivity.handler && typeof matchedActivity.handler === 'function') {
+                console.log(`      🔧 执行自定义处理函数...`);
+                try {
+                    await matchedActivity.handler(page, test);
+                    console.log(`      ✅ 自定义处理完成`);
+                } catch (handlerError) {
+                    console.log(`      ⚠️ 自定义处理失败: ${handlerError.message}`);
+                }
+            }
+        } else {
+            // 已由 activity-registry 执行过处理，跳过单独等待逻辑
+            console.log(`      ✅ 弹窗活动流程由内部处理器接管完成`);
         }
 
-        await page.waitForTimeout(targetConfig.waitTime || 1000);
-
-        // 8. 执行自定义处理函数（如果有）
-        if (matchedActivity.handler && typeof matchedActivity.handler === 'function') {
-            console.log(`      🔧 执行自定义处理函数...`);
-            try {
-                await matchedActivity.handler(page, test);
-                console.log(`      ✅ 自定义处理完成`);
-            } catch (handlerError) {
-                console.log(`      ⚠️ 自定义处理失败: ${handlerError.message}`);
-            }
-        }
-
-        // 9. 返回活动资讯页
-        console.log(`      ↩️ 返回 ${returnPageName}...`);
-        await page.goBack();
-        await page.waitForTimeout(1000);
-
-        // 10. 验证是否成功返回
-        const returnedUrl = page.url();
-        console.log(`      📍 返回后 URL: ${returnedUrl}`);
-
-        // 等待返回页面的元素出现
-        const returnSuccess = await page.locator(returnWaitForSelector)
-            .first()
-            .isVisible({ timeout: 3000 })
-            .catch(() => false);
-
-        if (!returnSuccess) {
-            console.log(`      ⚠️ 返回页面元素未找到，尝试再次返回...`);
+        // 9. 如果当前不在活动资讯页（通过 URL 判断），再去返回
+        const currentCheckUrl = page.url();
+        if (!currentCheckUrl.includes('/activity') && !currentCheckUrl.includes('/promo')) {
+            console.log(`      ↩️ 当前在 ${currentCheckUrl}，准备返回 ${returnPageName}...`);
             await page.goBack();
             await page.waitForTimeout(1000);
+            
+            // 10. 验证是否成功返回
+            const returnedUrl = page.url();
+            console.log(`      📍 返回后 URL: ${returnedUrl}`);
+
+            // 等待返回页面的元素出现
+            const returnSuccess = await page.locator(returnWaitForSelector)
+                .first()
+                .isVisible({ timeout: 3000 })
+                .catch(() => false);
+
+            if (!returnSuccess) {
+                console.log(`      ⚠️ 返回页面元素未找到，尝试再次返回...`);
+                await page.goBack();
+                await page.waitForTimeout(1000);
+            }
+        } else {
+            console.log(`      ✅ 已经在活动资讯页，无需跳转（当前 URL: ${currentCheckUrl}）`);
         }
 
         console.log(`      ✅ 已返回 ${returnPageName}`);
@@ -333,6 +324,22 @@ export async function verifyAllActivities(page, auth, test) {
                 success: false,
                 error: error.message
             });
+
+            // 如果发生异常，可能页面没有回到正确的状态，尝试强制返回活动页面
+            try {
+                const currentUrl = page.url();
+                if (!currentUrl.includes('/activity') && !currentUrl.includes('/promo')) {
+                    console.log(`      🔄 异常后不在活动列表页，尝试强制返回...`);
+                    const baseUrl = currentUrl.split('/').slice(0, 3).join('/');
+                    await page.goto(`${baseUrl}/activity`);
+                    await page.waitForTimeout(2000);
+                    
+                    // 确保列表重新加载
+                    await page.locator('.activeList').isVisible({ timeout: 5000 }).catch(() => false);
+                }
+            } catch (navError) {
+                console.log(`      ❌ 强制返回活动页失败: ${navError.message}`);
+            }
 
             // 继续验证下一个活动，不中断流程
         }
