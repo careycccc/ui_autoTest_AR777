@@ -67,7 +67,7 @@ export class Navigator {
         await this._clickFeatureEntry(featureConfig.entry);
 
         // 6. 等待功能页面加载
-        await this.page.waitForLoadState('networkidle');
+        await this.page.waitForLoadState('domcontentloaded');
 
         console.log(`[Navigator] 已到达功能: ${featureName}`);
     }

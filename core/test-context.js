@@ -86,7 +86,7 @@ export class TestContext {
                 .waitFor({ state: 'hidden', timeout: 10000 })
                 .catch(() => { });
         }
-        await this.page.waitForLoadState('networkidle');
+        await this.page.waitForLoadState('domcontentloaded');
     }
 
     /** 检查功能是否启用 */

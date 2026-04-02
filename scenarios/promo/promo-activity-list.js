@@ -15,7 +15,7 @@ import { identifyAndExecuteActivity } from '../activities/activity-registry.js';
 export async function handleActivityList(page, test, options = {}) {
     const {
         listSelector = '.activeList .activeItem',  // 活动列表项选择器
-        waitAfterClick = 2000,                     // 点击后等待时间
+        waitAfterClick = 3000,                     // 增加点击后等待时间到3秒
         maxRetries = 3                             // 最大重试次数
     } = options;
 
@@ -62,6 +62,14 @@ export async function handleActivityList(page, test, options = {}) {
                 results.skipped++;
             } else {
                 results.failed++;
+            }
+
+            // 🔥 确保在处理下一个活动前回到活动资讯页面
+            const currentUrl = page.url();
+            if (!currentUrl.includes('/activity')) {
+                console.log(`⚠️ 当前不在活动资讯页面，尝试返回...`);
+                await page.goto('https://arplatsaassit4.club/activity');
+                await page.waitForTimeout(2000);
             }
 
             // 等待一下再处理下一个
@@ -142,6 +150,9 @@ async function processActivityItem(page, test, listSelector, index, waitTime) {
 
         console.log(`👆 点击活动项 ${index + 1}...`);
         await activityItem.click();
+
+        // 🔥 增加等待时间，让弹窗有足够时间显示
+        console.log(`⏳ 等待 ${waitTime}ms 让弹窗显示...`);
         await page.waitForTimeout(waitTime);
 
         // 检查 URL 是否变化
@@ -247,8 +258,9 @@ async function checkForPopup(page) {
     try {
         console.log(`🔍 检查通知权限开启弹窗特征文本...`);
 
+        // 🔥 增加等待时间，让弹窗有足够时间显示
         const hasNotificationText = await page.getByText('Enable Notifications', { exact: false })
-            .isVisible({ timeout: 3000 })
+            .isVisible({ timeout: 5000 })  // 增加到5秒
             .catch(() => false);
 
         if (hasNotificationText) {
@@ -257,7 +269,7 @@ async function checkForPopup(page) {
         }
 
         const hasClaimText = await page.getByText('Enable Now & Claim', { exact: false })
-            .isVisible({ timeout: 3000 })
+            .isVisible({ timeout: 5000 })  // 增加到5秒
             .catch(() => false);
 
         if (hasClaimText) {
@@ -267,7 +279,7 @@ async function checkForPopup(page) {
 
         // 检查是否有 "Withdrawal Success!" 文本
         const hasWithdrawalText = await page.getByText('Withdrawal Success!', { exact: false })
-            .isVisible({ timeout: 1000 })
+            .isVisible({ timeout: 2000 })
             .catch(() => false);
 
         if (hasWithdrawalText) {

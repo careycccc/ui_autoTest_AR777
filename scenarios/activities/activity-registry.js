@@ -161,8 +161,10 @@ export const ACTIVITY_REGISTRY = {
         name: '超级大奖',
         identifiers: [
             { type: 'url', value: '/jackpot' },
+            { type: 'url', value: '/superJackpot' },
             { type: 'text', value: 'Super Jackpot' },
             { type: 'text', value: 'Jackpot' },
+            { type: 'selector', value: '.route-name' }, // 🔥 添加路由名称选择器
             { type: 'selector', value: '.jackpot-amount' },
             { type: 'selector', value: '.jackpot-info' }
         ],

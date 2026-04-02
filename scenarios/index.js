@@ -5,10 +5,12 @@
  */
 
 import { registerPromoCases } from './promo/promo-cases.js';
+import { registerPromoCasesEnhanced } from './promo/promo-cases-enhanced.js';
 import { registerEarnCases } from './earn/earn-cases.js';
 import { registerMenuCases } from './menu/menu-index.js';
 import { registerTurntableCases } from './turntable/turntable-cases.js';
 import { registerHomeCases } from './home/home-cases.js';
+import { registerDepositCases } from './deposit/deposit-cases.js';
 
 /**
  * 注册所有子用例
@@ -16,17 +18,19 @@ import { registerHomeCases } from './home/home-cases.js';
  * @param {Object} options - 可选配置
  * @param {Array<string>} options.only - 只注册指定的大类，例如 ['活动资讯', '新版返佣']
  * @param {Array<string>} options.exclude - 排除指定的大类
+ * @param {boolean} options.useEnhanced - 是否使用增强版的活动资讯验证（默认 false）
  */
 export function registerAllCases(runner, options = {}) {
-    const { only = null, exclude = [] } = options;
+    const { only = null, exclude = [], useEnhanced = false } = options;
 
     // 所有可用的大类及其注册函数
     const categories = {
-        '活动资讯': registerPromoCases,
+        '活动资讯': useEnhanced ? registerPromoCasesEnhanced : registerPromoCases,
         '新版返佣': registerEarnCases,
         '菜单': registerMenuCases,
         '邀请转盘': registerTurntableCases,
-        '家': registerHomeCases
+        '家': registerHomeCases,
+        '充值': registerDepositCases
     };
 
     // 确定要注册的大类
@@ -58,8 +62,10 @@ export function registerAllCases(runner, options = {}) {
  */
 export {
     registerPromoCases,
+    registerPromoCasesEnhanced,
     registerEarnCases,
     registerMenuCases,
     registerTurntableCases,
-    registerHomeCases
+    registerHomeCases,
+    registerDepositCases
 };

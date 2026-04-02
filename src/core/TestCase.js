@@ -412,7 +412,7 @@ export class TestCase {
       // 导航
       await this.performanceMonitor.start();
       await this.page.goto(url, {
-        waitUntil: 'networkidle',
+        waitUntil: 'domcontentloaded',
         timeout: this.config.timeout.navigation
       });
       await this.page.waitForLoadState('load');

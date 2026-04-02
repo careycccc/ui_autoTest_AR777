@@ -1647,7 +1647,8 @@ export class AuthHelper {
             await this.page.locator('[data-testid="login-send-code-btn"]').click();
         });
 
-        await this.page.waitForTimeout(1000);
+        // 等待验证码发送到后台系统（增加等待时间）
+        await this.page.waitForTimeout(3000);
 
         const code = await this.getVerifyCode(areaCode + phone);
         if (!code) return false;
