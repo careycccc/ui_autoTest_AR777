@@ -201,6 +201,105 @@ export async function enterGame(page, options = {}) {
 }
 
 /**
+ * 按游戏名精准进入指定游戏
+ *
+ * 游戏名取自卡片图片的 alt 属性，例如 alt="3 Genie Wishes"。
+ *
+ * @param {import('playwright').Page} page
+ * @param {string} gameName 游戏名，需与 img[alt] 完全一致
+ * @param {object} options
+ * @param {number} options.routeTimeout 等待路由跳转的超时(ms)
+ * @param {number} options.frameTimeout 等待 iframe 出现的超时(ms)
+ */
+export async function enterGameByName(page, gameName, options = {}) {
+    const { routeTimeout = 10000, frameTimeout = 15000 } = options;
+
+    const cards = page.locator('.game-grid .game-card');
+    const total = await cards.count();
+    if (total === 0) {
+        throw new Error('当前厂商下没有游戏卡片(.game-grid .game-card)');
+    }
+
+    const card = cards.filter({ has: page.locator(`img[alt="${gameName}"]`) }).first();
+
+    if (await card.count() === 0) {
+        const available = await listGames(page);
+        throw new Error(
+            `未找到游戏「${gameName}」，当前厂商下 ${total} 个游戏: ${available.join(' / ')}`
+        );
+    }
+
+    console.log(`      🎮 精准进入游戏: ${gameName}（共 ${total} 个游戏）`);
+
+    await card.scrollIntoViewIfNeeded();
+    await card.click();
+
+    return await waitForGamePage(page, gameName, { routeTimeout, frameTimeout, totalGames: total });
+}
+
+/** 列出当前厂商下所有游戏名（用于错误提示） */
+export async function listGames(page) {
+    return await page.$$eval('.game-grid .game-card img', els =>
+        els.map(e => e.alt).filter(Boolean)
+    ).catch(() => []);
+}
+
+/**
+ * 等待游戏页跳转与 iframe 就绪（enterGame / enterGameByName 共用）
+ */
+async function waitForGamePage(page, gameName, options) {
+    const { routeTimeout, frameTimeout, totalGames } = options;
+
+    let routeOk = false;
+    try {
+        await page.waitForURL(u => u.href.includes('/game/iframe'), { timeout: routeTimeout });
+        routeOk = true;
+    } catch {
+        routeOk = false;
+    }
+
+    if (!routeOk) {
+        throw new Error(
+            `点击游戏「${gameName}」后 ${routeTimeout}ms 内未跳转到 /game/iframe（当前 ${page.url()}）`
+        );
+    }
+    console.log(`      ✅ 已跳转游戏页: ${page.url().slice(0, 100)}...`);
+
+    let frameSrc = null;
+    try {
+        await page.waitForFunction(
+            () => {
+                const f = document.querySelector('iframe');
+                return !!(f && f.src && f.src.length > 10);
+            },
+            null,
+            { timeout: frameTimeout }
+        );
+        frameSrc = await page.evaluate(() => document.querySelector('iframe')?.src || null);
+    } catch {
+        frameSrc = null;
+    }
+
+    if (!frameSrc) {
+        throw new Error(`游戏「${gameName}」页面在 ${frameTimeout}ms 内未渲染出有效 iframe`);
+    }
+
+    console.log(`      ✅ 游戏 iframe 已加载`);
+    console.log(`         ${frameSrc.slice(0, 120)}...`);
+
+    const url = new URL(page.url());
+    return {
+        success: true,
+        gameName,
+        totalGames,
+        vendorCode: url.searchParams.get('vendorCode'),
+        gameCode: url.searchParams.get('gameCode'),
+        frameSrc,
+        urlAfter: page.url()
+    };
+}
+
+/**
  * 等待游戏画面真正显示出来
  *
  * 为什么不能只判断 iframe 存在或 readyState：
@@ -279,22 +378,85 @@ export async function waitForGameLoaded(page, options = {}) {
  * Playwright 的 frame API 不受同源策略限制，可直接读跨域 iframe
  */
 async function inspectGameFrame(page) {
-    try {
-        const gameFrame = page.frames().find(f => f !== page.mainFrame());
-        if (!gameFrame) return { accessible: false, canvasCount: 0, bodyHTMLLen: 0 };
+    const empty = { accessible: false, canvasCount: 0, bodyHTMLLen: 0, canvasSizes: [], bodyText: '' };
 
-        return await gameFrame.evaluate(() => ({
-            accessible: true,
-            readyState: document.readyState,
-            bodyHTMLLen: document.body?.innerHTML?.length || 0,
-            canvasCount: document.querySelectorAll('canvas').length,
-            canvasSizes: Array.from(document.querySelectorAll('canvas')).map(c => `${c.width}x${c.height}`),
-            bodyText: (document.body?.innerText || '').slice(0, 120).replace(/\n/g, '|')
-        }));
-    } catch {
-        // 游戏页跳转瞬间 frame 可能被销毁，视为尚未就绪
-        return { accessible: false, canvasCount: 0, bodyHTMLLen: 0, canvasSizes: [] };
+    // 游戏页可能是嵌套 iframe（外层容器 + 内层游戏），canvas 在内层。
+    // 因此遍历所有 frame 并合并信号，而不是只看第一个。
+    const frames = page.frames().filter(f => f !== page.mainFrame());
+    if (frames.length === 0) return empty;
+
+    const merged = { ...empty, canvasSizes: [] };
+
+    for (const frame of frames) {
+        try {
+            const info = await frame.evaluate(() => ({
+                readyState: document.readyState,
+                bodyHTMLLen: document.body?.innerHTML?.length || 0,
+                canvasCount: document.querySelectorAll('canvas').length,
+                canvasSizes: Array.from(document.querySelectorAll('canvas')).map(c => `${c.width}x${c.height}`),
+                bodyText: (document.body?.innerText || '').slice(0, 120).replace(/\n/g, '|')
+            }));
+
+            merged.accessible = true;
+            merged.canvasCount += info.canvasCount;
+            merged.canvasSizes.push(...info.canvasSizes);
+            // 取内容最多的那层作为 DOM 体量代表
+            if (info.bodyHTMLLen > merged.bodyHTMLLen) {
+                merged.bodyHTMLLen = info.bodyHTMLLen;
+                merged.readyState = info.readyState;
+            }
+            // Loading 文本出现在任一层都说明仍在加载
+            if (info.bodyText) {
+                merged.bodyText = merged.bodyText
+                    ? `${merged.bodyText} ${info.bodyText}`
+                    : info.bodyText;
+            }
+        } catch {
+            // frame 在跳转瞬间可能被销毁，跳过该层
+            continue;
+        }
     }
+
+    return merged;
+}
+
+/**
+ * 关闭平台的 OK 确认弹窗
+ *
+ * 结构：<div class="confirmBtn btn_main_style text_shadow">OK</div>
+ * 带 Vue scoped 属性，属于平台外层组件而非第三方游戏 iframe，
+ * 但为保险仍会遍历所有 frame 查找。
+ *
+ * 该弹窗会遮挡后续点击，因此在进入游戏、每轮操作前、返回前都要清一次。
+ *
+ * @returns {Promise<boolean>} 是否真的关闭了弹窗
+ */
+export async function dismissConfirmPopup(page, options = {}) {
+    const { timeout = 1200, silent = true } = options;
+
+    const contexts = [page, ...page.frames().filter(f => f !== page.mainFrame())];
+
+    for (const ctx of contexts) {
+        try {
+            const btn = ctx.locator('.confirmBtn').first();
+            if (await btn.count() === 0) continue;
+
+            const visible = await btn.isVisible({ timeout }).catch(() => false);
+            if (!visible) continue;
+
+            const text = (await btn.textContent().catch(() => '') || '').trim();
+            await btn.click({ timeout: 3000 });
+            console.log(`      ✖️ 已关闭确认弹窗（按钮: "${text}"）`);
+            await page.waitForTimeout(800);
+            return true;
+        } catch (e) {
+            if (!silent) {
+                console.log(`      ⚠️ 关闭弹窗异常: ${e.message.split('\n')[0]}`);
+            }
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -313,6 +475,9 @@ export async function goBackFromGame(page, options = {}) {
     const isBack = () => !page.url().includes('/game/iframe');
 
     if (isBack()) return { success: true, method: '无需返回' };
+
+    // 确认弹窗会遮挡返回按钮，先清掉
+    await dismissConfirmPopup(page);
 
     const strategies = [
         {
@@ -398,7 +563,8 @@ export async function playGames(page, options = {}) {
         startIndex = 0,
         loadTimeout = 180000,
         stopOnFirstSuccess = false,
-        onGameLoaded = null
+        onGameLoaded = null,
+        playOptions = {}
     } = options;
 
     const total = await page.locator('.game-grid .game-card').count();
@@ -430,14 +596,17 @@ export async function playGames(page, options = {}) {
             record.loadElapsed = loadResult.elapsed;
 
             if (loadResult.loaded) {
-                // ==========================================
-                // 扩展位：各游戏的具体玩法逻辑
-                // 此刻游戏画面已渲染完成，可安全操作
-                // ==========================================
-                if (onGameLoaded) {
-                    console.log(`      🕹️ 执行游戏内操作: ${entry.gameName}`);
-                    await onGameLoaded(page, entry);
-                }
+                // 游戏加载完可能弹出确认框，会挡住后续所有点击
+                await dismissConfirmPopup(page);
+
+                // 未指定玩法时，使用通用电子游戏玩法
+                const play = onGameLoaded || defaultSlotGameplay;
+                const playResult = await play(page, entry, playOptions);
+                // 以玩法函数的真实结果为准：一轮没玩成不能算 played，
+                // 否则余额耗尽也会被记成成功
+                record.played = playResult?.success === true;
+                record.roundsPlayed = playResult?.roundsPlayed ?? 0;
+                record.stoppedReason = playResult?.stoppedReason ?? null;
             } else {
                 console.log(`      ⏭️ 「${entry.gameName}」未显示，跳过并试下一个`);
             }
@@ -476,6 +645,109 @@ export async function playGames(page, options = {}) {
     });
 
     return results;
+}
+
+/**
+ * 【精准模式】进入指定名称的游戏并试玩
+ *
+ * 与 playGames（顺序模式）的区别：
+ *   playGames      —— 不指定游戏，按顺序一个个试，进不去就换下一个
+ *   playGameByName —— 指定游戏名精准进入，进不去直接报错（因为是明确的目标）
+ *
+ * @param {import('playwright').Page} page
+ * @param {string} gameName 游戏名（img 的 alt）
+ * @param {object} options
+ * @param {number}   options.loadTimeout  等待画面显示的超时(ms)
+ * @param {Function} options.onGameLoaded 画面显示后的玩法回调，默认走通用电子玩法
+ * @param {object}   options.playOptions  传给玩法函数的参数（轮数、间隔等）
+ */
+export async function playGameByName(page, gameName, options = {}) {
+    const {
+        loadTimeout = 180000,
+        onGameLoaded = null,
+        playOptions = {}
+    } = options;
+
+    console.log(`\n      ──────── 精准试玩: ${gameName} ────────`);
+
+    const record = {
+        mode: 'byName',
+        gameName,
+        entered: false,
+        loaded: false,
+        played: false,
+        returned: false,
+        error: null
+    };
+
+    try {
+        const entry = await enterGameByName(page, gameName);
+        record.entered = true;
+        record.vendorCode = entry.vendorCode;
+        record.gameCode = entry.gameCode;
+
+        const loadResult = await waitForGameLoaded(page, { timeout: loadTimeout });
+        record.loaded = loadResult.loaded;
+        record.loadElapsed = loadResult.elapsed;
+
+        if (loadResult.loaded) {
+            // 游戏加载完可能弹出确认框，会挡住后续所有点击
+            await dismissConfirmPopup(page);
+
+            // 未指定玩法时，使用通用电子游戏玩法
+            const play = onGameLoaded || defaultSlotGameplay;
+            const playResult = await play(page, entry, playOptions);
+            // 以玩法函数的真实结果为准，见 playGames 中同样的处理
+            record.played = playResult?.success === true;
+            record.roundsPlayed = playResult?.roundsPlayed ?? 0;
+            record.stoppedReason = playResult?.stoppedReason ?? null;
+        } else {
+            console.log(`      ⏭️ 「${gameName}」画面未显示`);
+        }
+    } catch (e) {
+        record.error = e.message;
+        console.log(`      ❌ ${e.message.split('\n')[0]}`);
+    }
+
+    const backResult = await goBackFromGame(page);
+    record.returned = backResult.success;
+
+    return record;
+}
+
+/**
+ * 按游戏名分派专属玩法
+ *
+ * 未登记的游戏一律走通用电子玩法（canvas 坐标点击）；
+ * 这里登记的是结构特殊、需要专门处理的游戏。
+ */
+const GAMEPLAY_BY_NAME = {
+    // MiniGame 两款是 DOM 游戏，有真实 input/button，可读余额动态算投注额
+    'FortuneFlow': async (page, opts) => {
+        const { playFortuneFlow } = await import('./minigame-gameplay.js');
+        return await playFortuneFlow(page, opts);
+    },
+    'ballonix': async (page, opts) => {
+        const { playBallonix } = await import('./minigame-gameplay.js');
+        return await playBallonix(page, opts);
+    }
+};
+
+/**
+ * 默认玩法调度：优先用游戏专属玩法，否则走通用电子玩法
+ * 动态导入以避免模块循环依赖
+ */
+async function defaultSlotGameplay(page, gameInfo, playOptions = {}) {
+    const special = GAMEPLAY_BY_NAME[gameInfo.gameName];
+
+    if (special) {
+        console.log(`      🕹️ 使用「${gameInfo.gameName}」专属玩法`);
+        return await special(page, playOptions);
+    }
+
+    const { playSlotGame } = await import('./slot-gameplay.js');
+    console.log(`      🕹️ 使用通用电子游戏玩法: ${gameInfo.gameName}`);
+    return await playSlotGame(page, playOptions);
 }
 
 /** 列出当前所有顶部分类名（用于错误提示） */

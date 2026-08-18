@@ -5,26 +5,47 @@
  *   1. 登录（优先密码登录，失败回退验证码登录）
  *   2. 清除首页所有弹窗
  *   3. 进入游戏二级页面（.see-all / .all-link / 文本 All）
- *   4. 选择顶部分类 Slots（横向滚动容器，目标常在视口外）
- *   5. 选择左侧厂商 MiniGame电子（纵向滚动容器，目标常在视口外）
- *   6. 依次试玩该厂商下的游戏：
- *        进入 → 等待画面显示(最长 3 分钟) → 游戏内操作 → 返回列表
- *        超时未显示的游戏直接跳过，继续下一个
+ *   4. 按 VENDOR_LIST 挑一个厂商试玩，失败自动降级到下一个
+ *
+ * ── 厂商选择规则（VENDOR_LIST）──
+ *   ['pp']         只跑 pp elect
+ *   ['mini']       只跑 MiniGame电子
+ *   ['pp','mini']  在未阵亡的厂商里随机挑一个
+ *
+ * ── 失败降级 ──
+ *   选中的厂商下所有游戏都跑不起来 → 标记该厂商不可用，当前账号立刻改跑下一个；
+ *   该标记跨账号共享，后续账号直接跳过它；
+ *   所有厂商都阵亡 → 后续账号跳过整个试玩环节。
+ *
+ * 玩法：未单独指定玩法的电子游戏统一走 slot-gameplay.js 的通用玩法。
+ *       每个账号玩 3~5 轮后结束，换账号由并发 runner 负责。
  */
 
 import { TestHooks } from '../src/utils/hooks.js';
 import { enterGameSubPage } from '../scenarios/game/game-entry.js';
-import { selectCategory, selectVendor, playGames } from '../scenarios/game/game-play.js';
+import { runVendorsWithFallback } from '../scenarios/game/vendor-runner.js';
+import { printRegistryStatus, randomInt } from '../scenarios/game/vendor-registry.js';
 
-/** 本次测试的目标分类与厂商 */
-const TARGET_CATEGORY = 'Slots';
-const TARGET_VENDOR = 'MiniGame电子';
+/**
+ * 候选厂商列表
+ * 可用环境变量覆盖：GAME_VENDORS=pp  /  GAME_VENDORS=mini  /  GAME_VENDORS=pp,mini
+ */
+const VENDOR_LIST = (process.env.GAME_VENDORS || 'pp,mini')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
 
 /**
  * 单个游戏等待画面显示的上限，默认 1 分钟。
- * 调试时可用环境变量缩短：GAME_LOAD_TIMEOUT=30000 node src/index.js
+ * 调试时可缩短：GAME_LOAD_TIMEOUT=30000 node src/index.js
  */
 const GAME_LOAD_TIMEOUT = parseInt(process.env.GAME_LOAD_TIMEOUT || String(1 * 60 * 1000), 10);
+
+/** 每个账号本次试玩的轮数：3~5 随机 */
+const ROUNDS = randomInt(3, 5);
+
+/** 每轮旋转之间的等待 */
+const ROUND_INTERVAL = 5000;
 
 export default async function (test) {
     let auth;
@@ -35,48 +56,56 @@ export default async function (test) {
         auth = await hooks.standardSetup();
     });
 
-    test.test(`试玩游戏: ${TARGET_CATEGORY} / ${TARGET_VENDOR}`, async () => {
+    test.test(`试玩游戏（候选 ${VENDOR_LIST.join('/')}，本轮 ${ROUNDS} 局）`, async () => {
         const page = test.page;
+        // 并发时由 ConcurrentRunner 注入；串行调试时回退占位
+        const accountId = test.account?.phone || 'single';
 
         await test.step('进入游戏二级页面', async () => {
             const entry = await enterGameSubPage(page, auth);
             console.log(`      命中策略: ${entry.strategy}`);
         });
 
-        await test.step(`选择分类 ${TARGET_CATEGORY}`, async () => {
-            await selectCategory(page, TARGET_CATEGORY);
+        const result = await runVendorsWithFallback(page, VENDOR_LIST, {
+            loadTimeout: GAME_LOAD_TIMEOUT,
+            playOptions: { rounds: ROUNDS, roundInterval: ROUND_INTERVAL },
+            accountId,
+            test
         });
 
-        await test.step(`选择厂商 ${TARGET_VENDOR}`, async () => {
-            await selectVendor(page, TARGET_VENDOR);
+        // ---- 汇总 ----
+        console.log(`\n      ══════ 账号 ${accountId} 试玩汇总 ══════`);
+        if (result.records.length === 0) {
+            console.log(`         （无试玩记录）`);
+        }
+        result.records.forEach(r => {
+            const icon = r.played ? '🎉' : (r.loaded ? '✅' : (r.entered ? '⏱️' : '❌'));
+            const detail = r.played
+                ? `玩了 ${r.roundsPlayed} 轮`
+                : (r.loaded ? '画面已显示但未试玩' : (r.error ? r.error.split('\n')[0].slice(0, 50) : '超时未显示'));
+            console.log(`         ${icon} [${r.vendor}] ${r.gameName || '(未知)'} — ${detail}`);
         });
 
-        let results;
-        await test.step('依次试玩游戏', async () => {
-            results = await playGames(page, {
-                loadTimeout: GAME_LOAD_TIMEOUT,
+        printRegistryStatus(VENDOR_LIST);
 
-                // ==================================================
-                // 各游戏的具体玩法逻辑挂在这里（后续补充）
-                // 触发时机：游戏画面已确认渲染完成
-                // gameInfo = { gameName, vendorCode, gameCode, frameSrc, ... }
-                // ==================================================
-                onGameLoaded: async (page, gameInfo) => {
-                    console.log(`      （待补充「${gameInfo.gameName}」的玩法逻辑）`);
-                }
-            });
-        });
+        // 所有厂商都已阵亡属于被测环境问题，跳过而非判失败，
+        // 否则后续账号会因为环境不可用而全部报错，掩盖真正的链路问题
+        if (result.skipped) {
+            const why = result.reason === 'insufficient_balance'
+                ? '账号余额不足，无法投注'
+                : '候选厂商均不可用';
+            console.log(`\n      ⏭️ 本账号跳过试玩（${why}）\n`);
+            return;
+        }
 
-        // 全部游戏都进不去才判定失败：单个游戏加载失败是被测环境的问题，
-        // 不应让整条链路（登录/导航/分类/厂商）的验证结果失真
-        const loadedCount = results.filter(r => r.loaded).length;
-        if (loadedCount === 0) {
+        const playedCount = result.records.filter(r => r.played).length;
+        if (playedCount === 0) {
             throw new Error(
-                `厂商「${TARGET_VENDOR}」下 ${results.length} 个游戏全部未能显示画面：` +
-                results.map(r => `${r.gameName}(${r.error ? '异常' : '超时'})`).join(', ')
+                `厂商 ${result.triedKeys.join('/')} 均未能成功试玩：` +
+                result.records.map(r => `${r.gameName || '?'}(${r.error ? '异常' : '超时'})`).join(', ')
             );
         }
 
-        console.log(`\n      🎉 试玩完成：${loadedCount}/${results.length} 个游戏成功显示画面\n`);
+        console.log(`\n      🎉 成功试玩 ${playedCount} 个游戏（厂商: ${result.vendorKey}）\n`);
     });
 }

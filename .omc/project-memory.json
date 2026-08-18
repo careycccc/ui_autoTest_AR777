@@ -165,10 +165,34 @@
   },
   "hotPaths": [
     {
+      "path": "scenarios/game/slot-gameplay.js",
+      "accessCount": 22,
+      "lastAccessed": 1787040012567,
+      "type": "file"
+    },
+    {
+      "path": "scenarios/game/game-play.js",
+      "accessCount": 13,
+      "lastAccessed": 1787048914447,
+      "type": "file"
+    },
+    {
+      "path": "scenarios/game/minigame-gameplay.js",
+      "accessCount": 13,
+      "lastAccessed": 1787049450113,
+      "type": "file"
+    },
+    {
       "path": "src/utils/auth.js",
       "accessCount": 11,
       "lastAccessed": 1787032584757,
       "type": "directory"
+    },
+    {
+      "path": "tests/game-entry.test.js",
+      "accessCount": 9,
+      "lastAccessed": 1787049189762,
+      "type": "file"
     },
     {
       "path": "src/index.js",
@@ -177,9 +201,9 @@
       "type": "directory"
     },
     {
-      "path": "tests/game-entry.test.js",
-      "accessCount": 4,
-      "lastAccessed": 1787034702946,
+      "path": "scenarios/game/vendor-runner.js",
+      "accessCount": 5,
+      "lastAccessed": 1787049536320,
       "type": "file"
     },
     {
@@ -207,9 +231,9 @@
       "type": "file"
     },
     {
-      "path": "scenarios/game/game-play.js",
+      "path": "scenarios/game/vendor-registry.js",
       "accessCount": 3,
-      "lastAccessed": 1787034668078,
+      "lastAccessed": 1787047715435,
       "type": "file"
     },
     {
@@ -288,6 +312,90 @@
       "path": "data/1.txt",
       "accessCount": 1,
       "lastAccessed": 1787032275609,
+      "type": "file"
+    },
+    {
+      "path": "reports/gameplay-debug/0-进入游戏.png",
+      "accessCount": 1,
+      "lastAccessed": 1787037093823,
+      "type": "file"
+    },
+    {
+      "path": "reports/gameplay-debug/2-第1轮后.png",
+      "accessCount": 1,
+      "lastAccessed": 1787037103772,
+      "type": "file"
+    },
+    {
+      "path": "reports/gameplay-debug/2-第5轮后.png",
+      "accessCount": 1,
+      "lastAccessed": 1787037103865,
+      "type": "file"
+    },
+    {
+      "path": "reports/gameplay-debug/3-第3轮后.png",
+      "accessCount": 1,
+      "lastAccessed": 1787037303108,
+      "type": "file"
+    },
+    {
+      "path": "reports/gameplay-debug/2-点击启动后.png",
+      "accessCount": 1,
+      "lastAccessed": 1787037303121,
+      "type": "file"
+    },
+    {
+      "path": "reports/gameplay-debug/3-第4轮-奖励兜底后.png",
+      "accessCount": 1,
+      "lastAccessed": 1787039396629,
+      "type": "file"
+    },
+    {
+      "path": "reports/gameplay-debug/2b-加注后.png",
+      "accessCount": 1,
+      "lastAccessed": 1787039396662,
+      "type": "file"
+    },
+    {
+      "path": "reports/gameplay-debug/3-第1轮后.png",
+      "accessCount": 1,
+      "lastAccessed": 1787039427347,
+      "type": "file"
+    },
+    {
+      "path": "reports/gameplay-debug/3-第2轮后.png",
+      "accessCount": 1,
+      "lastAccessed": 1787039427632,
+      "type": "file"
+    },
+    {
+      "path": "reports/gameplay-debug/2-加注后.png",
+      "accessCount": 1,
+      "lastAccessed": 1787039624583,
+      "type": "file"
+    },
+    {
+      "path": "reports/gameplay-debug/3-加注后.png",
+      "accessCount": 1,
+      "lastAccessed": 1787039891371,
+      "type": "file"
+    },
+    {
+      "path": "reports/gameplay-debug/4-第4轮后.png",
+      "accessCount": 1,
+      "lastAccessed": 1787039897241,
+      "type": "file"
+    },
+    {
+      "path": "tests/_probe-minigame.test.js",
+      "accessCount": 1,
+      "lastAccessed": 1787047260393,
+      "type": "file"
+    },
+    {
+      "path": "reports/gameplay-debug/mini-FortuneFlow-第1轮后.png",
+      "accessCount": 1,
+      "lastAccessed": 1787047893068,
       "type": "file"
     }
   ],

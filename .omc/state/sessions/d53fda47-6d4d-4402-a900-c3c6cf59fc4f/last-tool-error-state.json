@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd \\\"D:/project/ui_autoTest_AR777\\\" && node -e \\\"\\n// 模拟 ConcurrentRunner 中不同账号分别 import 同一模块\\nconst path = 'file://' + process.cwd().replace(/\\\\\\\\\\\\\\\\/g,'/') + '/scenarios/game/vendor-reg...",
+  "error": "Exit code 1\n[eval]:3\r\nconst path = 'file://' + process.cwd().replace(/\\/g,'/') + '/scenarios/game/vendor-registry.js';\r\n                                               ^^^^^^^\r\nExpected ',', got 'string literal'\r\n\r\nSyntaxError: missing ) after argument list\r\n    at makeContextifyScript (node:internal/vm:194:14)\r\n    at compileScript (node:internal/process/execution:420:10)\r\n    at evalTypeScript (node:internal/process/execution:292:22)\r\n    at node:internal/main/eval_string:71:3\r\n\r\nNode.js v25.9....",
+  "timestamp": "2026-08-18T07:40:04.120Z",
+  "retry_count": 1
+}
