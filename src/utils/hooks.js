@@ -23,13 +23,28 @@ export class TestHooks {
      * 完成后：页面处于干净的已登录首页状态 ✅
      */
     async standardSetup(options = {}) {
-        const { needLogin = true, networkFilters = null } = options;
+        const {
+            needLogin = true,
+            networkFilters = null,
+            // 并发场景下由 runner 注入到 TestCase 上；
+            // 串行调试时为空，login() 内部回退 dataConfig 默认账号
+            account = this.t.account || null
+        } = options;
 
         this.setupNetworkFilter(networkFilters);
 
         if (needLogin) {
+            // 显式传账号，避免并发时多个 context 争抢模块级单例 dataConfig
+            const loginOptions = account
+                ? { phone: account.phone, password: account.password, areaCode: account.areaCode }
+                : {};
+
+            if (account) {
+                console.log(`      👤 使用账号: ${account.phone}`);
+            }
+
             // login() 内部已包含弹窗处理，无需额外调用
-            const success = await this.auth.login();
+            const success = await this.auth.login(loginOptions);
             if (!success) throw new Error('登录失败');
         }
 

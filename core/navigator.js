@@ -67,7 +67,10 @@ export class Navigator {
         await this._clickFeatureEntry(featureConfig.entry);
 
         // 6. 等待功能页面加载
-        await this.page.waitForLoadState('networkidle');
+        // 尽力等待网络空闲，但站点有持续的埋点上报可能永不空闲，超时后继续执行
+        await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {
+            console.log('[Navigator] 网络空闲等待超时，继续执行');
+        });
 
         console.log(`[Navigator] 已到达功能: ${featureName}`);
     }

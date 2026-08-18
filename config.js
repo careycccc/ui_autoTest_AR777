@@ -227,7 +227,8 @@ export default {
 
 // dataConfig
 export const dataConfig = {
-  userName: '2028199712',  // 测试的前台登录账号
+  userName: '2028199712',  // 测试的前台登录账号（会被 data/1.txt 的账号池覆盖）
+  password: 'qwer1234',    // 前台登录密码（所有测试账号共用）
   areaCodeData: '91',  // 区号
   url: 'https://arplatsaassit4.club', // 前台地址
   adminUrl: 'https://arsitasdfghjklusa.com',//后台地址

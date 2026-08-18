@@ -411,8 +411,11 @@ export class TestCase {
 
       // 导航
       await this.performanceMonitor.start();
+      // 注意：不要用 waitUntil: 'networkidle'。
+      // 站点存在持续的埋点上报（阿里云 SLS），网络活动永不停歇，
+      // networkidle 要求的「500ms 无请求」窗口永远无法满足，必然走到超时。
       await this.page.goto(url, {
-        waitUntil: 'networkidle',
+        waitUntil: 'load',
         timeout: this.config.timeout.navigation
       });
       await this.page.waitForLoadState('load');

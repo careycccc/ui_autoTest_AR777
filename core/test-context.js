@@ -86,7 +86,8 @@ export class TestContext {
                 .waitFor({ state: 'hidden', timeout: 10000 })
                 .catch(() => { });
         }
-        await this.page.waitForLoadState('networkidle');
+        // 尽力等待网络空闲，但站点有持续的埋点上报可能永不空闲，超时后继续执行
+        await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => { });
     }
 
     /** 检查功能是否启用 */

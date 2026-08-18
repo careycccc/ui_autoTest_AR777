@@ -40,6 +40,22 @@ try {
 }
 
 // ============================================================
+// 账号池：从 data/1.txt 读取账号（一行一个），覆盖写死的账号
+// 读取失败时回退到 config.js 中的 dataConfig.userName
+// ============================================================
+const { tryLoadAccounts, DEFAULT_PASSWORD } = await import('./utils/account-loader.js');
+const accounts = tryLoadAccounts(undefined, { areaCode: dataConfig.areaCodeData });
+
+if (accounts.length > 0) {
+  dataConfig.userName = accounts[0].phone;
+  dataConfig.password = accounts[0].password;
+  console.log(`🔑 账号池: 共 ${accounts.length} 个账号，当前使用 ${accounts[0].phone}`);
+} else {
+  dataConfig.password = dataConfig.password || DEFAULT_PASSWORD;
+  console.log(`🔑 账号池为空，回退使用 config.js 账号: ${dataConfig.userName}`);
+}
+
+// ============================================================
 // 检测命令行参数
 // ============================================================
 const isUIMode = process.argv.includes('--ui');
@@ -65,18 +81,19 @@ if (isUIMode) {
 const testFiles = [
   // 'tests/runRandomMaster.test.js',
   // 'tests/example.test.js',
-  'tests/runAll.test.js',
+  // 'tests/runAll.test.js',
+  'tests/game-entry.test.js',   // 专项：进入游戏
 ];
 
 // ============================================================
 // 配置要测试的设备（从 config.js 中选择）
 // ============================================================
 const testDevices = [
-  // 'desktop',        // 桌面
+  // 'desktop',        // 桌面 windows
   'iphone14',       // iPhone 14
-  // 'iphone14pro',    // iPhone 14 Pro
-  // 'pixel7',         // Google Pixel 7
-  // 'samsungS23',     // Samsung S23
+  // 'iphone14pro',    
+  // 'pixel7',         
+  // 'samsungS23',    
   // 'ipadPro12',      // iPad Pro 12.9
 ];
 

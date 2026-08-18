@@ -1,0 +1,295 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1787029316434,
+  "projectRoot": "D:\\project\\ui_autoTest_AR777",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "@playwright/test",
+        "version": "1.58.1",
+        "category": "testing"
+      },
+      {
+        "name": "playwright",
+        "version": "1.40.0",
+        "category": "testing"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": "npm test",
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {
+      "test": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js",
+      "test:ui": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js --ui",
+      "debug": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js --ui",
+      "test:3004": "BRAND_NAME=brand-3004 node src/index.js",
+      "test:3003": "BRAND_NAME=brand-3003 node src/index.js",
+      "test:3002": "BRAND_NAME=brand-3002 node src/index.js",
+      "test:all": "npm run test:3004 && npm run test:3003 && npm run test:3002"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": "ES modules",
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "src",
+      "tests"
+    ],
+    "gitBranches": {
+      "defaultBranch": "master",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "configs": {
+      "path": "configs",
+      "purpose": null,
+      "fileCount": 4,
+      "lastAccessed": 1787029316395,
+      "keyFiles": [
+        "brand-3002.yaml",
+        "brand-3003.yaml",
+        "brand-3004.yaml",
+        "_schema.yaml"
+      ]
+    },
+    "core": {
+      "path": "core",
+      "purpose": null,
+      "fileCount": 4,
+      "lastAccessed": 1787029316395,
+      "keyFiles": [
+        "config-loader.js",
+        "element-loader.js",
+        "navigator.js",
+        "test-context.js"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 9,
+      "lastAccessed": 1787029316400,
+      "keyFiles": [
+        "activity-pool-guide.md",
+        "ACTIVITY_SYSTEM_SUMMARY.md",
+        "handleActivityClick-examples.md",
+        "NOTIFICATION_ACTIVITY.md",
+        "NOTIFICATION_ACTIVITY_UPDATE.md"
+      ]
+    },
+    "elements": {
+      "path": "elements",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1787029316400,
+      "keyFiles": []
+    },
+    "scenarios": {
+      "path": "scenarios",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1787029316401,
+      "keyFiles": [
+        "index.js",
+        "utils.js"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 1,
+      "lastAccessed": 1787029316402,
+      "keyFiles": [
+        "index.js"
+      ]
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 5,
+      "lastAccessed": 1787029316402,
+      "keyFiles": [
+        "arr777.test.js",
+        "example.test.js",
+        "runAll.test.js",
+        "runRandomMaster.test.js",
+        "user-profile.test.js"
+      ]
+    },
+    "src\\api": {
+      "path": "src\\api",
+      "purpose": "API routes",
+      "fileCount": 3,
+      "lastAccessed": 1787029316403,
+      "keyFiles": [
+        "adminlogin.test.js",
+        "handlerPay.test.js",
+        "smss.test.js"
+      ]
+    },
+    "src\\utils": {
+      "path": "src\\utils",
+      "purpose": "Utility functions",
+      "fileCount": 12,
+      "lastAccessed": 1787029316403,
+      "keyFiles": [
+        "ApiAnalyzer.js",
+        "auth.js",
+        "CanvasAccessibilityOverlay.js"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "src/utils/auth.js",
+      "accessCount": 11,
+      "lastAccessed": 1787032584757,
+      "type": "directory"
+    },
+    {
+      "path": "src/index.js",
+      "accessCount": 5,
+      "lastAccessed": 1787032273939,
+      "type": "directory"
+    },
+    {
+      "path": "tests/game-entry.test.js",
+      "accessCount": 4,
+      "lastAccessed": 1787034702946,
+      "type": "file"
+    },
+    {
+      "path": "config.js",
+      "accessCount": 3,
+      "lastAccessed": 1787032020914,
+      "type": "directory"
+    },
+    {
+      "path": "src/utils/hooks.js",
+      "accessCount": 3,
+      "lastAccessed": 1787032134497,
+      "type": "directory"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 3,
+      "lastAccessed": 1787032609587,
+      "type": "file"
+    },
+    {
+      "path": "tests/_probe-game.test.js",
+      "accessCount": 3,
+      "lastAccessed": 1787034317197,
+      "type": "file"
+    },
+    {
+      "path": "scenarios/game/game-play.js",
+      "accessCount": 3,
+      "lastAccessed": 1787034668078,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 2,
+      "lastAccessed": 1787029739482,
+      "type": "directory"
+    },
+    {
+      "path": "src/core/TestCase.js",
+      "accessCount": 2,
+      "lastAccessed": 1787030233480,
+      "type": "file"
+    },
+    {
+      "path": "core/navigator.js",
+      "accessCount": 2,
+      "lastAccessed": 1787030241636,
+      "type": "file"
+    },
+    {
+      "path": "core/test-context.js",
+      "accessCount": 2,
+      "lastAccessed": 1787030243299,
+      "type": "file"
+    },
+    {
+      "path": "src/core/TestRunner.js",
+      "accessCount": 2,
+      "lastAccessed": 1787031906962,
+      "type": "file"
+    },
+    {
+      "path": "src/core/ConcurrentRunner.js",
+      "accessCount": 2,
+      "lastAccessed": 1787032224098,
+      "type": "file"
+    },
+    {
+      "path": "core/config-loader.js",
+      "accessCount": 1,
+      "lastAccessed": 1787029584408,
+      "type": "file"
+    },
+    {
+      "path": "tests/runAll.test.js",
+      "accessCount": 1,
+      "lastAccessed": 1787031449311,
+      "type": "file"
+    },
+    {
+      "path": "src/common/common.js",
+      "accessCount": 1,
+      "lastAccessed": 1787031452341,
+      "type": "file"
+    },
+    {
+      "path": "src/utils/account-loader.js",
+      "accessCount": 1,
+      "lastAccessed": 1787031959488,
+      "type": "file"
+    },
+    {
+      "path": "scenarios/game/game-entry.js",
+      "accessCount": 1,
+      "lastAccessed": 1787032083066,
+      "type": "file"
+    },
+    {
+      "path": "src/concurrent.js",
+      "accessCount": 1,
+      "lastAccessed": 1787032256173,
+      "type": "file"
+    },
+    {
+      "path": "data/1.txt",
+      "accessCount": 1,
+      "lastAccessed": 1787032275609,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

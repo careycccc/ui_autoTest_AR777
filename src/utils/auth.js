@@ -391,6 +391,7 @@ export class AuthHelper {
         const {
             phone = dataConfig.userName,
             areaCode = dataConfig.areaCodeData,
+            password = dataConfig.password,
             skipIfLoggedIn = true
         } = options;
 
@@ -433,7 +434,7 @@ export class AuthHelper {
                 );
             });
 
-            const success = await this.performLogin(phone, areaCode);
+            const success = await this.performLogin(phone, areaCode, password);
 
             if (success) {
                 this.isLoggedIn = true;
@@ -1616,7 +1617,186 @@ export class AuthHelper {
     // 登录执行逻辑
     // ========================================
 
-    async performLogin(phone, areaCode) {
+    /**
+     * 登录调度器：优先密码登录，失败后回退验证码登录
+     *
+     * @param {string} phone     手机号
+     * @param {string} areaCode  区号
+     * @param {string} password  密码，为空则直接走验证码登录
+     */
+    async performLogin(phone, areaCode, password) {
+        if (password) {
+            console.log('      🔐 优先尝试密码登录');
+            const ok = await this.performPasswordLogin(phone, password, areaCode);
+            if (ok) return true;
+            console.log('      ⚠️ 密码登录失败，回退验证码登录');
+        } else {
+            console.log('      ℹ️ 未提供密码，直接走验证码登录');
+        }
+
+        return await this.performOtpLogin(phone, areaCode);
+    }
+
+    /**
+     * 密码登录
+     *
+     * 登录页默认落地即密码模式（页面显示 "OTP Login" 切换按钮）；
+     * 若当前处于验证码模式则先点 "Password Login" 切回来。
+     *
+     * 失败判定：点击登录按钮后 3 秒内路由无变化即视为失败。
+     *
+     * @returns {Promise<boolean>} 登录是否成功
+     */
+    async performPasswordLogin(phone, password, areaCode) {
+        try {
+            // 1. 确保处于密码模式
+            const inPasswordMode = await this._ensurePasswordMode();
+            if (!inPasswordMode) {
+                console.log('      ⚠️ 无法进入密码登录模式');
+                return false;
+            }
+
+            // 2. 选择区号（与验证码登录共用同一套区号选择器）
+            const areaCodeResult = await this.selectPhoneAreaCode(areaCode);
+            if (!areaCodeResult.success) {
+                console.log(`      ❌ 区号选择失败: ${areaCodeResult.error}`);
+                return false;
+            }
+
+            // 3. 填写账号与密码
+            await this.t.step('输入账号密码', async () => {
+                await this._fillInputSafely('[data-testid="form-input-userName"]', phone);
+                await this._fillInputSafely('[data-testid="form-input-password"]', password);
+            });
+
+            // 4. 提交，并以「3 秒内路由是否变化」判定成败
+            const urlBefore = this.page.url();
+            let routeChanged = false;
+
+            await this.t.step('提交密码登录', async () => {
+                const loginApiPromise = this.page.waitForResponse(
+                    res => res.url().includes('/api/') &&
+                        (res.url().includes('login') || res.url().includes('signin')),
+                    { timeout: 3000 }
+                ).catch(() => null);
+
+                await this.page.getByTestId('login-submit-btn').click();
+
+                const loginRes = await loginApiPromise;
+                if (loginRes) {
+                    console.log(`        📡 登录响应: ${loginRes.status()}`);
+                }
+
+                routeChanged = await this._waitForUrlChange(urlBefore, 3000);
+            });
+
+            if (!routeChanged) {
+                console.log('      ❌ 密码登录：3 秒内路由未变化，判定失败');
+                return false;
+            }
+
+            console.log(`        ✅ 路由已变化: ${this.page.url()}`);
+
+            await this.t.switchToPage('登录成功页', {
+                waitTime: 2000,
+                collectPreviousPage: true
+            });
+
+            await this.page.waitForTimeout(1500);
+
+            const success = await this.verifyLoginSuccess();
+            if (success) {
+                console.log('        ✓ 密码登录成功');
+                await this.getUserInfo();
+            } else {
+                console.log('      ❌ 密码登录：路由已变但未通过登录态校验');
+            }
+
+            return success;
+
+        } catch (e) {
+            console.log(`      ❌ 密码登录异常: ${e.message}`);
+            return false;
+        }
+    }
+
+    /**
+     * 确保登录页处于「密码登录」模式
+     *
+     * 判断依据：
+     *   - 页面出现 login-switch-otp（"OTP Login"）→ 当前已是密码模式
+     *   - 页面出现 login-switch-password（"Password Login"）→ 当前是验证码模式，点击切换
+     */
+    async _ensurePasswordMode() {
+        // 已在密码模式：页面提供的是「切到 OTP」的入口
+        const alreadyPassword = await this.page
+            .locator('[data-testid="login-switch-otp"]')
+            .isVisible({ timeout: 3000 })
+            .catch(() => false);
+
+        if (alreadyPassword) {
+            console.log('      ✅ 当前已是密码登录页');
+            return true;
+        }
+
+        // 在验证码模式：点击「Password Login」切换
+        const switchBtn = this.page.locator('[data-testid="login-switch-password"]');
+        const canSwitch = await switchBtn.isVisible({ timeout: 3000 }).catch(() => false);
+
+        if (!canSwitch) return false;
+
+        await this.t.step('切换密码登录', async () => {
+            await switchBtn.click();
+            await this.page.waitForTimeout(1500);
+        });
+        console.log('      ✅ 已切换到密码登录页');
+        return true;
+    }
+
+    /**
+     * 填写输入框，并校验值是否真的写入
+     *
+     * 密码框是自定义组件（type="text" + class="fake-password"），
+     * fill() 可能绕过框架的输入监听导致值未同步，
+     * 因此校验失败时退化为逐字符输入。
+     */
+    async _fillInputSafely(selector, value) {
+        const input = this.page.locator(selector);
+        await input.click();
+        await input.fill('');
+        await input.fill(value);
+
+        const actual = await input.inputValue().catch(() => null);
+
+        // inputValue 读得到且不匹配 → 说明 fill 没生效，改用逐字符输入
+        if (actual !== null && actual !== value) {
+            console.log(`        ⚠️ ${selector} fill 未生效(实际:"${actual}")，改用逐字符输入`);
+            await input.fill('');
+            await input.pressSequentially(value, { delay: 50 });
+        }
+    }
+
+    /**
+     * 等待路由发生变化
+     * @returns {Promise<boolean>} 超时前是否变化
+     */
+    async _waitForUrlChange(urlBefore, timeout = 3000) {
+        try {
+            await this.page.waitForFunction(
+                prev => window.location.href !== prev,
+                urlBefore,
+                { timeout }
+            );
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * 验证码登录（原 performLogin）
+     */
+    async performOtpLogin(phone, areaCode) {
         const hasOtp = await this.page.locator('[data-testid="login-switch-otp"]').isVisible();
         if (!hasOtp) {
             console.log('      ⚠️ 未找到 OTP 登录');
