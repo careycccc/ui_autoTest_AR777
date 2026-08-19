@@ -17,10 +17,24 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { ConcurrentRunner } from './core/ConcurrentRunner.js';
 import { loadAccounts, assignRandomDevices } from './utils/account-loader.js';
+import { parseGameArgs, exportGameArgsToEnv, describeGameArgs } from './utils/game-args.js';
+import { buildTarget } from '../scenarios/game/vendor-registry.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
+
+// ============================================================
+// 并发兜底：单个账号的异步故障不应终止整批测试
+//
+// 实测网络抖动（ERR_NETWORK_CHANGED / ETIMEDOUT）会让某个账号
+// 链路上的 Promise 拒绝无人接管，Node 默认直接终止进程，
+// 导致其余账号已完成的结果全部丢失。这里降级为告警。
+// ============================================================
+process.on('unhandledRejection', (reason) => {
+    const msg = reason?.message || String(reason);
+    console.error(`⚠️  未处理的 Promise 拒绝（已记录，不中断并发）: ${msg.split('\n')[0]}`);
+});
 
 // ============================================================
 // 解析命令行参数
@@ -34,6 +48,13 @@ const getArg = (name, fallback) => {
 const concurrency = parseInt(getArg('concurrency', '3'), 10);
 const headless = !argv.includes('--headed');
 const limit = parseInt(getArg('limit', '0'), 10);
+
+// 试玩目标：位置参数 <分类> <厂商>，或 --category= --vendor= --games= --all
+// 解析后写入环境变量，供被 import 的测试文件读取
+const gameArgs = parseGameArgs(
+    argv.filter(a => !/^--(concurrency|limit|headed)/.test(a))
+);
+exportGameArgsToEnv(gameArgs);
 
 // ============================================================
 // 版面配置
@@ -91,6 +112,7 @@ console.log(`📝 测试文件: ${path.basename(testFile)}`);
 console.log(`👥 账号数量: ${accounts.length}`);
 console.log(`⚡ 并发数量: ${concurrency}`);
 console.log(`🖥️  运行模式: ${headless ? '无头' : '有头'}`);
+console.log(`🎯 试玩目标: ${describeGameArgs(gameArgs, gameArgs.hasTarget ? buildTarget(gameArgs) : null)}`);
 console.log('══════════════════════════════════════════');
 
 try {

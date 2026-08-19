@@ -67,6 +67,21 @@ npm test -- tests/example.test.js
 npm run test:debug
 ```
 
+### 游戏试玩专项
+
+登录 → 进游戏二级页面 → 选分类/厂商 → 试玩，支持参数化与多账号并发：
+
+```bash
+# 单账号调试：<分类> <厂商>
+node src/index.js slots MINI
+
+# 多账号并发
+node src/concurrent.js slots MINI --concurrency=2
+```
+
+完整参数、并发说明、厂商与玩法登记方式见
+**[docs/游戏试玩执行命令.md](docs/游戏试玩执行命令.md)**。
+
 ---
 
 ## 📊 性能监控

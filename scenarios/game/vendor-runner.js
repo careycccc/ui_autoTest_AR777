@@ -42,19 +42,30 @@ async function runOneVendor(page, target, options = {}) {
     });
 
     await step(`选择厂商 ${target.vendor}`, async () => {
-        await selectVendor(page, target.vendor);
+        await selectVendor(page, target.vendor, { aliases: target.vendorAliases || [] });
     });
 
     let records = [];
 
     if (target.mode === 'byName') {
-        await step(`精准试玩 ${target.gameName}`, async () => {
-            const record = await playGameByName(page, target.gameName, {
-                loadTimeout,
-                playOptions: mergedPlayOptions
+        // 支持指定多个游戏依次玩（如 MiniGame 的 FortuneFlow + ballonix）
+        const names = target.gameNames?.length
+            ? target.gameNames
+            : (target.gameName ? [target.gameName] : []);
+
+        if (names.length === 0) {
+            throw new Error(`厂商「${target.vendor}」为精准模式但未指定游戏名`);
+        }
+
+        for (const name of names) {
+            await step(`精准试玩 ${name}`, async () => {
+                const record = await playGameByName(page, name, {
+                    loadTimeout,
+                    playOptions: mergedPlayOptions
+                });
+                records.push(record);
             });
-            records = [record];
-        });
+        }
     } else {
         await step(`顺序试玩 ${target.vendor}`, async () => {
             records = await playGames(page, {
@@ -88,8 +99,41 @@ export async function runVendorsWithFallback(page, list, options = {}) {
         loadTimeout = 60000,
         playOptions = {},
         accountId = 'unknown',
-        test = null
+        test = null,
+        // 由命令行参数构建的目标；给了就直接用它，不走 list 随机与降级
+        explicitTarget = null
     } = options;
+
+    // ---- 参数指定了厂商：直接执行，不参与随机与降级 ----
+    if (explicitTarget) {
+        console.log(`\n      🎯 按参数指定的厂商执行: ${explicitTarget.category} / ${explicitTarget.vendor}`);
+
+        const { records, anySuccess } = await runOneVendor(page, explicitTarget, {
+            loadTimeout, playOptions, test
+        });
+
+        const tagged = records.map(r => ({
+            ...r, vendorKey: explicitTarget.key, vendor: explicitTarget.vendor
+        }));
+        recordAttempt(explicitTarget.key, anySuccess);
+
+        const allBroke = tagged.length > 0 && tagged.every(
+            r => r.loaded && r.stoppedReason === 'insufficient_balance'
+        );
+
+        if (!anySuccess && allBroke) {
+            console.log(`      💸 账号 ${accountId} 余额不足，跳过`);
+            return {
+                skipped: true, reason: 'insufficient_balance',
+                vendorKey: explicitTarget.key, records: tagged, triedKeys: [explicitTarget.key]
+            };
+        }
+
+        return {
+            skipped: false, vendorKey: explicitTarget.key,
+            records: tagged, triedKeys: [explicitTarget.key]
+        };
+    }
 
     // 开跑前先看整体状态：前面的账号可能已把所有厂商判死
     if (allVendorsDead(list)) {

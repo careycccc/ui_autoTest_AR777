@@ -36,6 +36,14 @@ export async function selectCategory(page, categoryName, options = {}) {
 
     console.log(`      🔍 选择分类: ${categoryName}`);
 
+    // 二级页面是 SPA 异步渲染，进页面后分类 tab 未必立即存在。
+    // 不等就去找会拿到空列表，报出「当前可选: 」这种无信息的错误。
+    await page.locator('.category-tabs .category-tab').first()
+        .waitFor({ state: 'visible', timeout: 15000 })
+        .catch(() => {
+            console.log(`      ⚠️ 等待分类容器超时，继续尝试匹配`);
+        });
+
     const matcher = exact
         ? new RegExp(`^${escapeRegExp(categoryName)}$`)
         : new RegExp(escapeRegExp(categoryName), 'i');
@@ -74,20 +82,48 @@ export async function selectCategory(page, categoryName, options = {}) {
  * @param {string} vendorName  厂商名，如 'MiniGame电子'
  */
 export async function selectVendor(page, vendorName, options = {}) {
-    const { waitAfter = 3000 } = options;
+    const { waitAfter = 3000, aliases = [] } = options;
 
-    console.log(`      🔍 选择厂商: ${vendorName}`);
+    // 厂商显示名会随站点配置变化（实测 "MiniGame电子" 变成过 "MINI"），
+    // 因此支持多个候选名依次匹配
+    const candidates = [vendorName, ...aliases].filter(Boolean);
+    console.log(`      🔍 选择厂商: ${candidates.join(' 或 ')}`);
 
-    // 点击 .category-item（.name 的父级），点击区域更大更可靠
-    const item = page
-        .locator('.category-list .category-item')
-        .filter({ has: page.locator('.name', { hasText: new RegExp(`^${escapeRegExp(vendorName)}$`) }) })
-        .first();
+    // 切换分类后左侧厂商列表会重新渲染，同样需要等待
+    await page.locator('.category-list .category-item').first()
+        .waitFor({ state: 'visible', timeout: 15000 })
+        .catch(() => {
+            console.log(`      ⚠️ 等待厂商列表超时，继续尝试匹配`);
+        });
 
-    if (await item.count() === 0) {
-        const available = await listVendors(page);
-        throw new Error(`未找到厂商「${vendorName}」，当前可选: ${available.join(' / ')}`);
+    let item = null;
+    let matched = null;
+
+    for (const name of candidates) {
+        // 点击 .category-item（.name 的父级），点击区域更大更可靠
+        const candidate = page
+            .locator('.category-list .category-item')
+            .filter({ has: page.locator('.name', { hasText: new RegExp(`^${escapeRegExp(name)}$`) }) })
+            .first();
+
+        if (await candidate.count() > 0) {
+            item = candidate;
+            matched = name;
+            if (name !== vendorName) {
+                console.log(`      ℹ️ 主名称未命中，匹配到别名「${name}」`);
+            }
+            break;
+        }
     }
+
+    if (!item) {
+        const available = await listVendors(page);
+        throw new Error(
+            `未找到厂商「${candidates.join(' / ')}」，当前可选: ${available.join(' / ')}`
+        );
+    }
+
+    vendorName = matched;
 
     // 厂商列表较长，目标项通常在视口下方，需要纵向滚动
     await item.scrollIntoViewIfNeeded();
@@ -434,29 +470,168 @@ async function inspectGameFrame(page) {
 export async function dismissConfirmPopup(page, options = {}) {
     const { timeout = 1200, silent = true } = options;
 
+    // 已知会遮挡操作的弹窗关闭按钮，按优先级尝试：
+    //   .confirmBtn            平台通用确认框（如 Welcome Lucky Jackpot 的 OK）
+    //   .reserve-force-popup   新账号首登的 "N FREE SPINS WAITING" 强制弹窗
+    //                          （z-index 9999 全屏 fixed，会拦下所有点击）
+    const CLOSE_SELECTORS = [
+        '.confirmBtn',
+        '.reserve-force-popup .close-btn',
+        '.reserve-force-popup [class*="close"]',
+        '.reserve-force-popup button',
+        '.close-btn'
+    ];
+
     const contexts = [page, ...page.frames().filter(f => f !== page.mainFrame())];
 
     for (const ctx of contexts) {
+      for (const selector of CLOSE_SELECTORS) {
         try {
-            const btn = ctx.locator('.confirmBtn').first();
+            const btn = ctx.locator(selector).first();
             if (await btn.count() === 0) continue;
 
             const visible = await btn.isVisible({ timeout }).catch(() => false);
             if (!visible) continue;
 
             const text = (await btn.textContent().catch(() => '') || '').trim();
-            await btn.click({ timeout: 3000 });
-            console.log(`      ✖️ 已关闭确认弹窗（按钮: "${text}"）`);
+
+            // 弹窗可能带入场动画，force 点击避免「元素尚未稳定」导致空等
+            await btn.click({ timeout: 3000, force: true });
             await page.waitForTimeout(800);
+
+            // 必须校验是否真的关掉了：若只是点了个没反应的按钮就返回 true，
+            // 调用方的循环会提前退出，弹窗依旧遮挡后续操作
+            const stillThere = await btn.isVisible({ timeout: 500 }).catch(() => false);
+            if (stillThere) {
+                // 点了没反应，换下一个候选选择器继续试
+                console.log(`      ⚠️ 点击「${selector}」后弹窗仍在，尝试其他关闭方式`);
+                continue;
+            }
+
+            console.log(`      ✖️ 已关闭弹窗（${selector}，按钮文本: "${text}"）`);
             return true;
         } catch (e) {
             if (!silent) {
-                console.log(`      ⚠️ 关闭弹窗异常: ${e.message.split('\n')[0]}`);
+                console.log(`      ⚠️ 关闭弹窗异常(${selector}): ${e.message.split('\n')[0]}`);
             }
         }
+      }
     }
 
     return false;
+}
+
+/**
+ * 强制清除挡住操作的全屏弹窗
+ *
+ * 背景（实测并发跑 5 个新账号得到）：
+ *   新账号首登会随机弹出两类全屏强制弹窗，且**内部都没有关闭按钮**：
+ *     .popup-mask + .popup-content.lucky-register  "Welcome Lucky Jackpot"
+ *     .reserve-force-popup                          "N FREE SPINS WAITING"
+ *   它们 z-index 高达 2000~9999 且 position:fixed，会拦下所有点击；
+ *   auth.checkAndHandleHomePopups 只认 "View My Bonus" 和弹窗图片，
+ *   面对它们会「识别到却关不掉」，空转到 20 次上限后放行，
+ *   最终让 .see-all 的点击一直等到超时。
+ *
+ * 按侵入性从低到高依次尝试，命中即停。
+ *
+ * @returns {Promise<{cleared:boolean, method:string|null}>}
+ */
+export async function dismissBlockingPopups(page, options = {}) {
+    const { dumpHtml = false } = options;
+
+    const OVERLAY_SELECTORS = [
+        '.reserve-force-popup',
+        '.popup-mask',
+        '.isForcePopup_link',
+        '.popup-content.lucky-register'
+    ];
+
+    const hasOverlay = async () => await page.evaluate((sels) => {
+        return sels.some(s => {
+            const el = document.querySelector(s);
+            if (!el) return false;
+            const cs = getComputedStyle(el);
+            if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+            const r = el.getBoundingClientRect();
+            return r.width > 100 && r.height > 100;
+        });
+    }, OVERLAY_SELECTORS);
+
+    if (!await hasOverlay()) return { cleared: true, method: '无遮挡' };
+
+    // 需要时把完整 HTML 打出来，供确认准确的关闭方式
+    if (dumpHtml) {
+        const html = await page.evaluate((sels) => {
+            for (const s of sels) {
+                const el = document.querySelector(s);
+                if (el) return `${s} => ${el.outerHTML.slice(0, 600)}`;
+            }
+            return null;
+        }, OVERLAY_SELECTORS);
+        if (html) console.log(`      🔎 遮挡层 HTML: ${html}`);
+    }
+
+    // ① 常规关闭按钮
+    if (await dismissConfirmPopup(page) && !await hasOverlay()) {
+        return { cleared: true, method: '关闭按钮' };
+    }
+
+    // ② ESC
+    await page.keyboard.press('Escape').catch(() => { });
+    await page.waitForTimeout(600);
+    if (!await hasOverlay()) {
+        console.log(`      ✖️ 已通过 ESC 关闭强制弹窗`);
+        return { cleared: true, method: 'ESC' };
+    }
+
+    // ③ 点遮罩边缘（避开弹窗主体，模拟点击外部关闭）
+    //
+    // 注意：点击会穿透到遮罩下方的页面元素。实测点 (8, 12%高度) 正好挨着
+    // banner-image(15,56 尺寸 329x120)，弹窗是关了，页面也被带去了活动页，
+    // 导致后续找不到 .see-all。因此改点最左边缘中部，并在关闭后校验路由，
+    // 一旦被带走就导航回首页。
+    try {
+        const vp = page.viewportSize();
+        if (vp) {
+            const urlBefore = page.url();
+            await page.mouse.click(2, Math.round(vp.height * 0.5));
+            await page.waitForTimeout(600);
+
+            if (!await hasOverlay()) {
+                if (page.url() !== urlBefore) {
+                    console.log(`      ↩️ 点击外部触发了跳转，导航回首页`);
+                    await page.goto(urlBefore, { waitUntil: 'load', timeout: 30000 }).catch(() => { });
+                    await page.waitForTimeout(1500);
+                }
+                console.log(`      ✖️ 已通过点击遮罩外部关闭强制弹窗`);
+                return { cleared: true, method: '点击外部' };
+            }
+        }
+    } catch { }
+
+    // ④ 兜底：直接隐藏遮挡层
+    // 这类强制弹窗没有提供任何关闭入口，若不处理则后续步骤全部无法进行。
+    // 属于绕过被测 UI 的手段，因此显式告警，避免掩盖真实的产品问题。
+    const removed = await page.evaluate((sels) => {
+        let n = 0;
+        sels.forEach(s => {
+            document.querySelectorAll(s).forEach(el => {
+                el.style.setProperty('display', 'none', 'important');
+                el.style.setProperty('pointer-events', 'none', 'important');
+                n++;
+            });
+        });
+        return n;
+    }, OVERLAY_SELECTORS).catch(() => 0);
+
+    if (removed > 0 && !await hasOverlay()) {
+        console.log(`      ⚠️ 强制弹窗无关闭入口，已用脚本隐藏 ${removed} 个遮挡层以继续测试`);
+        return { cleared: true, method: '脚本隐藏' };
+    }
+
+    console.log(`      ❌ 强制弹窗仍未清除`);
+    return { cleared: false, method: null };
 }
 
 /**

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1787029316434,
+  "lastScanned": 1787119623803,
   "projectRoot": "D:\\project\\ui_autoTest_AR777",
   "techStack": {
     "languages": [
@@ -40,12 +40,21 @@
       "test:3004": "BRAND_NAME=brand-3004 node src/index.js",
       "test:3003": "BRAND_NAME=brand-3003 node src/index.js",
       "test:3002": "BRAND_NAME=brand-3002 node src/index.js",
-      "test:all": "npm run test:3004 && npm run test:3003 && npm run test:3002"
+      "test:all": "npm run test:3004 && npm run test:3003 && npm run test:3002",
+      "test:concurrent": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/concurrent.js",
+      "test:concurrent:headed": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/concurrent.js --headed --concurrency=2",
+      "game": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js",
+      "game:mini": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js slots MINI",
+      "game:pp": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js slots \"pp elect\"",
+      "game:mini:all": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js slots MINI --all",
+      "game:concurrent": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/concurrent.js --concurrency=2",
+      "game:concurrent:mini": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/concurrent.js slots MINI --concurrency=2",
+      "game:shots": "GAMEPLAY_SHOTS=reports/gameplay-debug BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js"
     }
   },
   "conventions": {
     "namingStyle": null,
-    "importStyle": "ES modules",
+    "importStyle": null,
     "testPattern": null,
     "fileOrganization": null
   },
@@ -68,7 +77,7 @@
       "path": "configs",
       "purpose": null,
       "fileCount": 4,
-      "lastAccessed": 1787029316395,
+      "lastAccessed": 1787119623752,
       "keyFiles": [
         "brand-3002.yaml",
         "brand-3003.yaml",
@@ -80,7 +89,7 @@
       "path": "core",
       "purpose": null,
       "fileCount": 4,
-      "lastAccessed": 1787029316395,
+      "lastAccessed": 1787119623760,
       "keyFiles": [
         "config-loader.js",
         "element-loader.js",
@@ -88,11 +97,20 @@
         "test-context.js"
       ]
     },
+    "data": {
+      "path": "data",
+      "purpose": "Data files",
+      "fileCount": 1,
+      "lastAccessed": 1787119623760,
+      "keyFiles": [
+        "1.txt"
+      ]
+    },
     "docs": {
       "path": "docs",
       "purpose": "Documentation",
-      "fileCount": 9,
-      "lastAccessed": 1787029316400,
+      "fileCount": 10,
+      "lastAccessed": 1787119623761,
       "keyFiles": [
         "activity-pool-guide.md",
         "ACTIVITY_SYSTEM_SUMMARY.md",
@@ -105,14 +123,21 @@
       "path": "elements",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1787029316400,
+      "lastAccessed": 1787119623761,
+      "keyFiles": []
+    },
+    "reports": {
+      "path": "reports",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1787119623762,
       "keyFiles": []
     },
     "scenarios": {
       "path": "scenarios",
       "purpose": null,
       "fileCount": 2,
-      "lastAccessed": 1787029316401,
+      "lastAccessed": 1787119623762,
       "keyFiles": [
         "index.js",
         "utils.js"
@@ -121,30 +146,31 @@
     "src": {
       "path": "src",
       "purpose": "Source code",
-      "fileCount": 1,
-      "lastAccessed": 1787029316402,
+      "fileCount": 2,
+      "lastAccessed": 1787119623762,
       "keyFiles": [
+        "concurrent.js",
         "index.js"
       ]
     },
     "tests": {
       "path": "tests",
       "purpose": "Test files",
-      "fileCount": 5,
-      "lastAccessed": 1787029316402,
+      "fileCount": 8,
+      "lastAccessed": 1787119623763,
       "keyFiles": [
         "arr777.test.js",
         "example.test.js",
+        "game-entry.test.js",
         "runAll.test.js",
-        "runRandomMaster.test.js",
-        "user-profile.test.js"
+        "runRandomMaster.test.js"
       ]
     },
     "src\\api": {
       "path": "src\\api",
       "purpose": "API routes",
       "fileCount": 3,
-      "lastAccessed": 1787029316403,
+      "lastAccessed": 1787119623764,
       "keyFiles": [
         "adminlogin.test.js",
         "handlerPay.test.js",
@@ -154,250 +180,15 @@
     "src\\utils": {
       "path": "src\\utils",
       "purpose": "Utility functions",
-      "fileCount": 12,
-      "lastAccessed": 1787029316403,
+      "fileCount": 14,
+      "lastAccessed": 1787119623765,
       "keyFiles": [
+        "account-loader.js",
         "ApiAnalyzer.js",
-        "auth.js",
-        "CanvasAccessibilityOverlay.js"
+        "auth.js"
       ]
     }
   },
-  "hotPaths": [
-    {
-      "path": "scenarios/game/slot-gameplay.js",
-      "accessCount": 22,
-      "lastAccessed": 1787040012567,
-      "type": "file"
-    },
-    {
-      "path": "scenarios/game/game-play.js",
-      "accessCount": 13,
-      "lastAccessed": 1787048914447,
-      "type": "file"
-    },
-    {
-      "path": "scenarios/game/minigame-gameplay.js",
-      "accessCount": 13,
-      "lastAccessed": 1787049450113,
-      "type": "file"
-    },
-    {
-      "path": "src/utils/auth.js",
-      "accessCount": 11,
-      "lastAccessed": 1787032584757,
-      "type": "directory"
-    },
-    {
-      "path": "tests/game-entry.test.js",
-      "accessCount": 9,
-      "lastAccessed": 1787049189762,
-      "type": "file"
-    },
-    {
-      "path": "src/index.js",
-      "accessCount": 5,
-      "lastAccessed": 1787032273939,
-      "type": "directory"
-    },
-    {
-      "path": "scenarios/game/vendor-runner.js",
-      "accessCount": 5,
-      "lastAccessed": 1787049536320,
-      "type": "file"
-    },
-    {
-      "path": "config.js",
-      "accessCount": 3,
-      "lastAccessed": 1787032020914,
-      "type": "directory"
-    },
-    {
-      "path": "src/utils/hooks.js",
-      "accessCount": 3,
-      "lastAccessed": 1787032134497,
-      "type": "directory"
-    },
-    {
-      "path": "package.json",
-      "accessCount": 3,
-      "lastAccessed": 1787032609587,
-      "type": "file"
-    },
-    {
-      "path": "tests/_probe-game.test.js",
-      "accessCount": 3,
-      "lastAccessed": 1787034317197,
-      "type": "file"
-    },
-    {
-      "path": "scenarios/game/vendor-registry.js",
-      "accessCount": 3,
-      "lastAccessed": 1787047715435,
-      "type": "file"
-    },
-    {
-      "path": "",
-      "accessCount": 2,
-      "lastAccessed": 1787029739482,
-      "type": "directory"
-    },
-    {
-      "path": "src/core/TestCase.js",
-      "accessCount": 2,
-      "lastAccessed": 1787030233480,
-      "type": "file"
-    },
-    {
-      "path": "core/navigator.js",
-      "accessCount": 2,
-      "lastAccessed": 1787030241636,
-      "type": "file"
-    },
-    {
-      "path": "core/test-context.js",
-      "accessCount": 2,
-      "lastAccessed": 1787030243299,
-      "type": "file"
-    },
-    {
-      "path": "src/core/TestRunner.js",
-      "accessCount": 2,
-      "lastAccessed": 1787031906962,
-      "type": "file"
-    },
-    {
-      "path": "src/core/ConcurrentRunner.js",
-      "accessCount": 2,
-      "lastAccessed": 1787032224098,
-      "type": "file"
-    },
-    {
-      "path": "core/config-loader.js",
-      "accessCount": 1,
-      "lastAccessed": 1787029584408,
-      "type": "file"
-    },
-    {
-      "path": "tests/runAll.test.js",
-      "accessCount": 1,
-      "lastAccessed": 1787031449311,
-      "type": "file"
-    },
-    {
-      "path": "src/common/common.js",
-      "accessCount": 1,
-      "lastAccessed": 1787031452341,
-      "type": "file"
-    },
-    {
-      "path": "src/utils/account-loader.js",
-      "accessCount": 1,
-      "lastAccessed": 1787031959488,
-      "type": "file"
-    },
-    {
-      "path": "scenarios/game/game-entry.js",
-      "accessCount": 1,
-      "lastAccessed": 1787032083066,
-      "type": "file"
-    },
-    {
-      "path": "src/concurrent.js",
-      "accessCount": 1,
-      "lastAccessed": 1787032256173,
-      "type": "file"
-    },
-    {
-      "path": "data/1.txt",
-      "accessCount": 1,
-      "lastAccessed": 1787032275609,
-      "type": "file"
-    },
-    {
-      "path": "reports/gameplay-debug/0-进入游戏.png",
-      "accessCount": 1,
-      "lastAccessed": 1787037093823,
-      "type": "file"
-    },
-    {
-      "path": "reports/gameplay-debug/2-第1轮后.png",
-      "accessCount": 1,
-      "lastAccessed": 1787037103772,
-      "type": "file"
-    },
-    {
-      "path": "reports/gameplay-debug/2-第5轮后.png",
-      "accessCount": 1,
-      "lastAccessed": 1787037103865,
-      "type": "file"
-    },
-    {
-      "path": "reports/gameplay-debug/3-第3轮后.png",
-      "accessCount": 1,
-      "lastAccessed": 1787037303108,
-      "type": "file"
-    },
-    {
-      "path": "reports/gameplay-debug/2-点击启动后.png",
-      "accessCount": 1,
-      "lastAccessed": 1787037303121,
-      "type": "file"
-    },
-    {
-      "path": "reports/gameplay-debug/3-第4轮-奖励兜底后.png",
-      "accessCount": 1,
-      "lastAccessed": 1787039396629,
-      "type": "file"
-    },
-    {
-      "path": "reports/gameplay-debug/2b-加注后.png",
-      "accessCount": 1,
-      "lastAccessed": 1787039396662,
-      "type": "file"
-    },
-    {
-      "path": "reports/gameplay-debug/3-第1轮后.png",
-      "accessCount": 1,
-      "lastAccessed": 1787039427347,
-      "type": "file"
-    },
-    {
-      "path": "reports/gameplay-debug/3-第2轮后.png",
-      "accessCount": 1,
-      "lastAccessed": 1787039427632,
-      "type": "file"
-    },
-    {
-      "path": "reports/gameplay-debug/2-加注后.png",
-      "accessCount": 1,
-      "lastAccessed": 1787039624583,
-      "type": "file"
-    },
-    {
-      "path": "reports/gameplay-debug/3-加注后.png",
-      "accessCount": 1,
-      "lastAccessed": 1787039891371,
-      "type": "file"
-    },
-    {
-      "path": "reports/gameplay-debug/4-第4轮后.png",
-      "accessCount": 1,
-      "lastAccessed": 1787039897241,
-      "type": "file"
-    },
-    {
-      "path": "tests/_probe-minigame.test.js",
-      "accessCount": 1,
-      "lastAccessed": 1787047260393,
-      "type": "file"
-    },
-    {
-      "path": "reports/gameplay-debug/mini-FortuneFlow-第1轮后.png",
-      "accessCount": 1,
-      "lastAccessed": 1787047893068,
-      "type": "file"
-    }
-  ],
+  "hotPaths": [],
   "userDirectives": []
 }

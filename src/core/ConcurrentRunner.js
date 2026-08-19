@@ -17,9 +17,35 @@
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
+import { AsyncLocalStorage } from 'async_hooks';
 import { TestCase } from './TestCase.js';
 import { TestRunner } from './TestRunner.js';
 import { pickRandomDevice } from '../utils/account-loader.js';
+
+// ============================================================
+// 并发日志标识
+//
+// 多个账号的输出会交错在同一个终端，不加标识根本无法还原
+// 单个账号的执行链路。AsyncLocalStorage 能在异步调用栈中
+// 隔离地携带上下文，因此可以在不改动任何业务代码 console.log
+// 的前提下，给每条日志自动加上账号前缀。
+// ============================================================
+const logContext = new AsyncLocalStorage();
+let logPatched = false;
+
+function patchConsoleOnce() {
+    if (logPatched) return;
+    logPatched = true;
+
+    for (const level of ['log', 'warn', 'error']) {
+        const original = console[level].bind(console);
+        console[level] = (...args) => {
+            const ctx = logContext.getStore();
+            if (ctx) original(`[W${ctx.worker}|${ctx.tag}]`, ...args);
+            else original(...args);
+        };
+    }
+}
 
 export class ConcurrentRunner extends TestRunner {
     /**
@@ -70,6 +96,9 @@ export class ConcurrentRunner extends TestRunner {
             console.log(`   [${i + 1}] ${t.phone} → ${t.device}`);
         });
 
+        // 给并发日志加账号前缀，便于还原单个账号的执行链路
+        patchConsoleOnce();
+
         this.browser = await chromium.launch({
             headless: this.headless,
             slowMo: this.headless ? 0 : this.config.browser.slowMo,
@@ -102,13 +131,17 @@ export class ConcurrentRunner extends TestRunner {
                 const task = queue.shift();
                 if (!task) break;
 
-                try {
-                    await this._runOneAccount(absolutePath, task, workerId);
-                } catch (e) {
-                    console.error(`   ❌ [W${workerId}] ${task.phone} 执行异常: ${e.message}`);
-                    this.results.total++;
-                    this.results.failed++;
-                }
+                // 在账号专属的日志上下文中执行，输出自动带 [W1|1102] 前缀
+                const tag = task.phone.slice(-4);
+                await logContext.run({ worker: workerId, tag }, async () => {
+                    try {
+                        await this._runOneAccount(absolutePath, task, workerId);
+                    } catch (e) {
+                        console.error(`   ❌ ${task.phone} 执行异常: ${e.message}`);
+                        this.results.total++;
+                        this.results.failed++;
+                    }
+                });
             }
         };
 

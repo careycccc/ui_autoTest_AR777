@@ -25,7 +25,7 @@ export const VENDORS = {
         category: 'Slots',
         vendor: 'pp elect',
         mode: 'byName',                 // 精准模式：直接进指定游戏
-        gameName: '3 Genie Wishes',
+        gameNames: ['3 Genie Wishes'],
         // 该厂商特有的玩法参数：进游戏后随机加注 3~6 次
         playOptions: { adjustBet: true, betClicks: [3, 6] }
     },
@@ -33,9 +33,14 @@ export const VENDORS = {
         key: 'mini',
         category: 'Slots',
         vendor: 'MiniGame电子',
-        mode: 'inOrder',                // 顺序模式：一个个试下去
-        // 该厂商下每个游戏都有各自玩法（FortuneFlow / ballonix），
-        // 成功一个后仍要继续玩下一个，因此不提前收工
+        // 站点会改厂商显示名（实测同一版面出现过 MINI），依次尝试
+        vendorAliases: ['MINI', 'MiniGame'],
+        // 默认精准模式：只玩已实现专属玩法的两个游戏。
+        // 该厂商下有 28+ 个游戏，全部跑完既慢、未登记玩法的又必然失败；
+        // 需要全跑时用 --all 或把 mode 改成 inOrder。
+        mode: 'byName',
+        gameNames: ['FortuneFlow', 'ballonix'],
+        // 顺序模式下不提前收工，把每个游戏都试一遍
         stopOnFirstSuccess: false,
         playOptions: {}
     }
@@ -130,4 +135,39 @@ export function resetRegistry() {
 /** 生成 [min,max] 闭区间随机整数 */
 export function randomInt(min, max) {
     return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+/**
+ * 按命令行参数动态构建试玩目标
+ *
+ * 优先复用 VENDORS 里的预设（拿到它的别名、玩法参数等），
+ * 预设里没有的厂商也能直接用 —— 这样新增厂商不必改代码。
+ *
+ * @param {{category?:string, vendor:string, games?:string[], mode?:string}} args
+ * @returns {object} 与 VENDORS 条目同构的 target
+ */
+export function buildTarget(args) {
+    const { category, vendor, games = [], mode } = args;
+
+    // 主名或别名命中预设即复用其配置
+    const preset = Object.values(VENDORS).find(v =>
+        v.vendor === vendor || (v.vendorAliases || []).includes(vendor)
+    );
+
+    // 未显式指定模式时：给了游戏名走精准，否则沿用预设，最后兜底顺序模式
+    const resolvedMode = mode || (games.length > 0 ? 'byName' : (preset?.mode || 'inOrder'));
+
+    return {
+        key: preset?.key || vendor.toLowerCase().replace(/\s+/g, '-'),
+        category: category || preset?.category || 'Slots',
+        vendor,
+        // 传入的厂商名本身也加进候选，避免预设主名与实际显示名不一致时匹配失败
+        vendorAliases: Array.from(new Set([
+            ...(preset ? [preset.vendor, ...(preset.vendorAliases || [])] : []),
+        ].filter(n => n && n !== vendor))),
+        mode: resolvedMode,
+        gameNames: games.length > 0 ? games : (preset?.gameNames || (preset?.gameName ? [preset.gameName] : [])),
+        stopOnFirstSuccess: preset?.stopOnFirstSuccess,
+        playOptions: preset?.playOptions || {}
+    };
 }

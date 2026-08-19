@@ -12,7 +12,14 @@
     "test:3002": "BRAND_NAME=brand-3002 node src/index.js",
     "test:all": "npm run test:3004 && npm run test:3003 && npm run test:3002",
     "test:concurrent": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/concurrent.js",
-    "test:concurrent:headed": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/concurrent.js --headed --concurrency=2"
+    "test:concurrent:headed": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/concurrent.js --headed --concurrency=2",
+    "game": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js",
+    "game:mini": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js slots MINI",
+    "game:pp": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js slots \"pp elect\"",
+    "game:mini:all": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js slots MINI --all",
+    "game:concurrent": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/concurrent.js --concurrency=2",
+    "game:concurrent:mini": "BRAND_NAME=${BRAND_NAME:-brand-3004} node src/concurrent.js slots MINI --concurrency=2",
+    "game:shots": "GAMEPLAY_SHOTS=reports/gameplay-debug BRAND_NAME=${BRAND_NAME:-brand-3004} node src/index.js"
   },
   "dependencies": {
     "@playwright/test": "^1.58.1",

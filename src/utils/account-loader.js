@@ -22,6 +22,29 @@ export const DEFAULT_ACCOUNT_FILE = path.join(rootDir, 'data', '1.txt');
 export const RANDOM_DEVICES = ['iphone14', 'iphone14pro', 'pixel7', 'samsungS23'];
 
 /**
+ * 规范化账号：拆出内含的区号
+ *
+ * 账号文件里可能直接写「区号 + 手机号」的完整串，例如 918005199727，
+ * 而登录表单的手机号输入框 maxlength="10"、区号是单独的下拉框，
+ * 直接填 12 位会被截断成错误号码。
+ *
+ * 规则：长度 12 时，前 2 位视为区号，后 10 位为手机号；其余原样返回。
+ *
+ * @param {string} raw        原始账号串
+ * @param {string} fallback   拆不出区号时使用的默认区号
+ * @returns {{phone:string, areaCode:string}}
+ */
+export function normalizePhone(raw, fallback = '91') {
+    const digits = String(raw).trim();
+
+    if (/^\d{12}$/.test(digits)) {
+        return { phone: digits.slice(2), areaCode: digits.slice(0, 2) };
+    }
+
+    return { phone: digits, areaCode: fallback };
+}
+
+/**
  * 从 txt 文件读取账号列表
  *
  * 文件格式：一行一个账号，空行与 # 开头的注释行会被忽略
@@ -44,7 +67,10 @@ export function loadAccounts(filePath = DEFAULT_ACCOUNT_FILE, options = {}) {
         .split(/\r?\n/)
         .map(line => line.trim())
         .filter(line => line && !line.startsWith('#'))
-        .map(phone => ({ phone, password, areaCode }));
+        .map(line => {
+            const { phone, areaCode: parsedAreaCode } = normalizePhone(line, areaCode);
+            return { phone, password, areaCode: parsedAreaCode };
+        });
 
     if (accounts.length === 0) {
         throw new Error(`账号文件为空: ${filePath}\n请写入至少一个账号，一行一个`);

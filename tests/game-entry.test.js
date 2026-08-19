@@ -1,6 +1,38 @@
 /**
  * 专项测试：从首页进入游戏并试玩
  *
+ * ═══════════════ 执行命令 ═══════════════
+ *
+ * 【单账号调试】<分类> <厂商>
+ *   node src/index.js slots MINI
+ *   node src/index.js slots pp elect
+ *   node src/index.js slots MINI --games="FortuneFlow,ballonix"
+ *   node src/index.js slots MINI --all          该厂商下全部游戏依次试玩
+ *   node src/index.js                           不指定，走 pp/mini 随机+失败降级
+ *
+ * 【多账号并发】账号取自 data/1.txt
+ *   node src/concurrent.js slots MINI --concurrency=2
+ *   node src/concurrent.js slots MINI --concurrency=2 --limit=2    只跑前 2 个账号
+ *   node src/concurrent.js slots MINI --concurrency=2 --headed     有头模式
+ *
+ * 【npm 脚本】
+ *   npm run game:mini              等价 node src/index.js slots MINI
+ *   npm run game:pp                等价 node src/index.js slots "pp elect"
+ *   npm run game:mini:all          MINI 全部游戏
+ *   npm run game:concurrent:mini   MINI 并发 2
+ *   npm run game:shots             开启玩法节点截图（校准 canvas 坐标）
+ *
+ * 【环境变量】
+ *   BRAND_NAME=brand-3003          换版面，默认 brand-3004
+ *   GAME_LOAD_TIMEOUT=25000        单游戏等画面上限(ms)，默认 60000
+ *   GAMEPLAY_SHOTS=reports/shots   玩法关键节点截图目录
+ *   GAME_VENDORS=pp,mini           未指定 --vendor 时的候选厂商
+ *
+ * 厂商名含空格时加不加引号都可以（slots pp elect 会自动拼成 "pp elect"）。
+ * 完整说明见 docs/游戏试玩执行命令.md
+ *
+ * ════════════════════════════════════════
+ *
  * 流程：
  *   1. 登录（优先密码登录，失败回退验证码登录）
  *   2. 清除首页所有弹窗
@@ -24,7 +56,8 @@
 import { TestHooks } from '../src/utils/hooks.js';
 import { enterGameSubPage } from '../scenarios/game/game-entry.js';
 import { runVendorsWithFallback } from '../scenarios/game/vendor-runner.js';
-import { printRegistryStatus, randomInt } from '../scenarios/game/vendor-registry.js';
+import { printRegistryStatus, randomInt, buildTarget } from '../scenarios/game/vendor-registry.js';
+import { readGameArgsFromEnv, describeGameArgs } from '../src/utils/game-args.js';
 
 /**
  * 候选厂商列表
@@ -34,6 +67,14 @@ const VENDOR_LIST = (process.env.GAME_VENDORS || 'pp,mini')
     .split(',')
     .map(s => s.trim())
     .filter(Boolean);
+
+/**
+ * 命令行指定的试玩目标（分类 / 厂商 / 游戏名）
+ * 例：node src/concurrent.js Slots MINI --games="FortuneFlow,ballonix"
+ * 未指定时回退到 VENDOR_LIST 预设的随机+降级逻辑
+ */
+const CLI_ARGS = readGameArgsFromEnv();
+const EXPLICIT_TARGET = CLI_ARGS.hasTarget ? buildTarget(CLI_ARGS) : null;
 
 /**
  * 单个游戏等待画面显示的上限，默认 1 分钟。
@@ -66,11 +107,14 @@ export default async function (test) {
             console.log(`      命中策略: ${entry.strategy}`);
         });
 
+        console.log(`      🎯 试玩目标: ${describeGameArgs(CLI_ARGS, EXPLICIT_TARGET)}`);
+
         const result = await runVendorsWithFallback(page, VENDOR_LIST, {
             loadTimeout: GAME_LOAD_TIMEOUT,
             playOptions: { rounds: ROUNDS, roundInterval: ROUND_INTERVAL },
             accountId,
-            test
+            test,
+            explicitTarget: EXPLICIT_TARGET
         });
 
         // ---- 汇总 ----

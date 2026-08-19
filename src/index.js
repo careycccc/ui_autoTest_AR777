@@ -56,6 +56,16 @@ if (accounts.length > 0) {
 }
 
 // ============================================================
+// 试玩目标参数：位置参数 <分类> <厂商>，或 --category= --vendor= --games= --all
+// 解析后写入环境变量，供被 import 的测试文件读取
+// ============================================================
+const { parseGameArgs, exportGameArgsToEnv, describeGameArgs } = await import('./utils/game-args.js');
+const gameArgs = parseGameArgs(process.argv.slice(2).filter(a => a !== '--ui'));
+exportGameArgsToEnv(gameArgs);
+const { buildTarget: _bt } = await import('../scenarios/game/vendor-registry.js');
+console.log(`🎯 试玩目标: ${describeGameArgs(gameArgs, gameArgs.hasTarget ? _bt(gameArgs) : null)}`);
+
+// ============================================================
 // 检测命令行参数
 // ============================================================
 const isUIMode = process.argv.includes('--ui');
